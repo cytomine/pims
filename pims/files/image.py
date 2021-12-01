@@ -11,15 +11,44 @@
 #  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
+from __future__ import annotations
+
 from functools import cached_property
+from typing import List, Optional, TYPE_CHECKING, Tuple
+
+import numpy as np
+from pint import Quantity
 
 from pims.api.exceptions import NoMatchingFormatProblem
 from pims.files.file import Path
-from pims.formats.utils.pyramid import normalized_pyramid
+from pims.formats.utils.factories import FormatFactory
+from pims.formats.utils.structures.pyramid import normalized_pyramid
+from pims.processing.adapters import ImagePixels
+from pims.processing.region import Region, Tile
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from pims.formats import AbstractFormat
+    from pims.api.utils.models import HistogramType
+    from pims.files.histogram import Histogram
+    from pims.formats.utils.structures.annotations import ParsedMetadataAnnotation
+    from pims.formats.utils.structures.metadata import (
+        ImageAssociated, ImageChannel, ImageMicroscope,
+        ImageObjective, MetadataStore
+    )
+    from pims.formats.utils.structures.pyramid import Pyramid
 
 
 class Image(Path):
-    def __init__(self, *pathsegments, factory=None, format=None):
+    """
+    An image. Acts as a facade in front of underlying technical details
+    about specific image formats.
+    """
+    def __init__(
+        self, *pathsegments,
+        factory: FormatFactory = None, format: AbstractFormat = None
+    ):
         super().__init__(*pathsegments)
 
         _format = factory.match(self) if factory else format
@@ -32,142 +61,146 @@ class Image(Path):
             self._format = _format
 
     @property
-    def format(self):
+    def format(self) -> AbstractFormat:
         return self._format
 
     @property
-    def media_type(self):
+    def media_type(self) -> str:
         return self._format.media_type
 
     @property
-    def width(self):
+    def width(self) -> int:
         return self._format.main_imd.width
 
     @property
-    def physical_size_x(self):
+    def physical_size_x(self) -> Optional[Quantity]:
         return self._format.full_imd.physical_size_x
 
     @property
-    def height(self):
+    def height(self) -> int:
         return self._format.main_imd.height
 
     @property
-    def physical_size_y(self):
+    def physical_size_y(self) -> Optional[Quantity]:
         return self._format.full_imd.physical_size_y
 
     @property
-    def n_pixels(self):
+    def n_pixels(self) -> int:
         return self.width * self.height
 
     @property
-    def depth(self):
+    def depth(self) -> int:
         return self._format.main_imd.depth
 
     @property
-    def physical_size_z(self):
+    def physical_size_z(self) -> Optional[Quantity]:
         return self._format.full_imd.physical_size_z
 
     @property
-    def duration(self):
+    def duration(self) -> int:
         return self._format.main_imd.duration
 
     @property
-    def frame_rate(self):
+    def frame_rate(self) -> Optional[Quantity]:
         return self._format.main_imd.frame_rate
 
     @property
-    def n_channels(self):
+    def n_channels(self) -> int:
         return self._format.main_imd.n_channels
 
     @property
-    def n_intrinsic_channels(self):
+    def n_intrinsic_channels(self) -> int:
         return self._format.main_imd.n_intrinsic_channels
 
     @property
-    def n_distinct_channels(self):
+    def n_distinct_channels(self) -> int:
         return self._format.main_imd.n_distinct_channels
 
     @property
-    def n_channels_per_read(self):
+    def n_channels_per_read(self) -> int:
         return self._format.main_imd.n_channels_per_read
 
     @property
-    def n_planes(self):
+    def n_planes(self) -> int:
         return self._format.main_imd.n_planes
 
     @property
-    def pixel_type(self):
+    def pixel_type(self) -> np.dtype:
         return self._format.main_imd.pixel_type
 
     @property
-    def significant_bits(self):
+    def significant_bits(self) -> int:
         return self._format.main_imd.significant_bits
 
     @property
-    def max_value(self):
+    def max_value(self) -> int:
         return 2 ** self.significant_bits - 1
 
     @property
-    def value_range(self):
+    def value_range(self) -> range:
         return range(0, self.max_value + 1)
 
     @property
-    def acquisition_datetime(self):
+    def acquisition_datetime(self) -> datetime:
         return self._format.full_imd.acquisition_datetime
 
     @property
-    def description(self):
+    def description(self) -> str:
         return self._format.full_imd.description
 
     @property
-    def channels(self):
+    def channels(self) -> List[ImageChannel]:
         return self._format.main_imd.channels
 
     @property
-    def objective(self):
+    def objective(self) -> ImageObjective:
         return self._format.full_imd.objective
 
     @property
-    def microscope(self):
+    def microscope(self) -> ImageMicroscope:
         return self._format.full_imd.microscope
 
     @property
-    def associated_thumb(self):
+    def associated_thumb(self) -> ImageAssociated:
         return self._format.full_imd.associated_thumb
 
     @property
-    def associated_label(self):
+    def associated_label(self) -> ImageAssociated:
         return self._format.full_imd.associated_label
 
     @property
-    def associated_macro(self):
+    def associated_macro(self) -> ImageAssociated:
         return self._format.full_imd.associated_macro
 
     @property
-    def raw_metadata(self):
+    def raw_metadata(self) -> MetadataStore:
         return self._format.raw_metadata
 
     @property
-    def pyramid(self):
+    def annotations(self) -> List[ParsedMetadataAnnotation]:
+        return self._format.annotations
+
+    @property
+    def pyramid(self) -> Pyramid:
         return self._format.pyramid
 
     @cached_property
-    def normalized_pyramid(self):
+    def normalized_pyramid(self) -> Pyramid:
         return normalized_pyramid(self.width, self.height)
 
     @cached_property
-    def is_pyramid_normalized(self):
+    def is_pyramid_normalized(self) -> bool:
         return self.pyramid == self.normalized_pyramid
 
     @cached_property
-    def histogram(self):
+    def histogram(self) -> Histogram:
         histogram = self.get_histogram()
         if histogram:
             return histogram
         else:
             return self._format.histogram
 
-    def histogram_type(self):
+    def histogram_type(self) -> HistogramType:
         return self.histogram.type()
 
     def image_bounds(self):
@@ -194,93 +227,233 @@ class Image(Path):
     def plane_histogram(self, c, z, t):
         return self.histogram.plane_histogram(c, z, t)
 
-    def tile(self, tile_region, c=None, z=None, t=None):
+    def tile(
+        self, tile: Tile, c: Optional[int] = None, z: Optional[int] = None,
+        t: Optional[int] = None
+    ) -> ImagePixels:
         """
-        Get tile at specified level and tile index for all (C,Z,T) combinations.
+        Get a tile.
 
-        Returns
-        ------
-        tile: image-like (PILImage, VIPSImage, numpy array)
-            The tile (dimensions: tile_size x tile_size x len(c) x len(z) x len(t))
-        """
-        return self._format.reader.read_tile(tile_region, c=c, z=z, t=t)
+        Returned channels are best-effort, that is, depending on the format
+        and the underlying library used to extract pixels from the image format,
+        it may or may not be possible to return only the asked channels.
 
-    def window(self, viewport, out_width, out_height, c=None, z=None, t=None):
-        """
-        Get window for specified viewport. The output dimensions are best-effort i.e.
-        out_width and out_height are the effective spatial lengths if the underlying window
-        extractor is able to return these spatial dimensions.
-
-        Returns
-        -------
-        window: image-like (PILImage, VIPSImage, numpy array)
-            The window (dimensions: try_out_width x try_out_height x len(c) x len(z) x len(t))
-        """
-        if hasattr(self._format.reader, "read_window"):
-            return self._format.reader.read_window(viewport, out_width, out_height, c=c, z=z, t=t)
-        else:
-            # TODO: implement window from tiles
-            raise NotImplementedError
-
-    def thumbnail(self, out_width, out_height, precomputed=False, c=None, z=None, t=None):
-        """
-        Get thumbnail. The output dimensions are best-effort i.e. out_width and out_height
-        are the effective spatial lengths if the underlying thumbnail
-        extractor is able to return these spatial dimensions.
+        Parameters
+        ----------
+        tile
+            A 2D region at a given downsample (linked to a pyramid tier)
+        c
+            The asked channel index (best-effort).
+            If not set, all channels are considered.
+        z
+            The asked z-slice index. Image formats without Z-stack support
+            can safely ignore this parameter. Behavior is undetermined if `z`
+            is not set for an image format with Z-stack support.
+        t
+            The asked timepoint index. Image formats without time support
+            can safely ignore this parameter. Behavior is undetermined if `t`
+            is not set for an image format with time support.
 
         Returns
         -------
-        thumbnail: image-like (PILImage, VIPSImage, numpy array)
-            The thumbnail (dimensions: try_out_width x try_out_height x len(c) x len(z) x len(t))
+        ImagePixels
         """
-        if hasattr(self._format.reader, "read_thumb"):
+        try:
+            return self._format.reader.read_tile(tile, c=c, z=z, t=t)
+        except NotImplementedError as e:
+            # Implement tile extraction from window ?
+            raise e
+
+    def window(
+        self, region: Region, out_width: int, out_height: int,
+        c: Optional[int] = None, z: Optional[int] = None,
+        t: Optional[int] = None
+    ) -> ImagePixels:
+        """
+        Get an image window whose output dimensions are the nearest possible to
+        asked output dimensions.
+
+        Output dimensions are best-effort, that is, depending on the format,
+        the image pyramid characteristics, and the underlying library used to
+        extract pixels from the image format, it may or may not be possible to
+        return a window at the asked output dimensions. In all cases:
+        * `true_out_width >= out_width`
+        * `true_out_height >= out_height`
+
+        Returned channels are best-effort, that is, depending on the format
+        and the underlying library used to extract pixels from the image format,
+        it may or may not be possible to return only the asked channels.
+
+        Parameters
+        ----------
+        region
+            A 2D region at a given downsample
+        out_width
+            The asked output width (best-effort)
+        out_height
+            The asked output height (best-effort)
+        c
+            The asked channel index (best-effort).
+            If not set, all channels are considered.
+        z
+            The asked z-slice index. Image formats without Z-stack support
+            can safely ignore this parameter. Behavior is undetermined if `z`
+            is not set for an image format with Z-stack support.
+        t
+            The asked timepoint index. Image formats without time support
+            can safely ignore this parameter. Behavior is undetermined if `t`
+            is not set for an image format with time support.
+
+        Returns
+        -------
+        ImagePixels
+        """
+        try:
+            return self._format.reader.read_window(
+                region, out_width, out_height, c=c, z=z, t=t
+            )
+        except NotImplementedError as e:
+            # Implement window extraction from tiles ?
+            raise e
+
+    def thumbnail(
+        self, out_width: int, out_height: int, precomputed: bool = False,
+        c: Optional[int] = None, z: Optional[int] = None, t: Optional[int] = None
+    ) -> ImagePixels:
+        """
+        Get an image thumbnail whose dimensions are the nearest possible to
+        asked output dimensions.
+
+        Output dimensions are best-effort, that is, depending on the format
+        and the underlying library used to extract pixels from the image format,
+        it may or may not be possible to return a thumbnail at the asked output
+        dimensions. In all cases:
+        * `true_out_width >= out_width`
+        * `true_out_height >= out_height`
+
+        Returned channels are best-effort, that is, depending on the format
+        and the underlying library used to extract pixels from the image format,
+        it may or may not be possible to return only the asked channels.
+
+        Parameters
+        ----------
+        out_width
+            The asked output width (best-effort)
+        out_height
+            The asked output height (best-effort)
+        precomputed
+            Whether use precomputed thumbnail stored in the file if available.
+        c
+            The asked channel index (best-effort).
+            If not set, all channels are considered.
+        z
+            The asked z-slice index. Image formats without Z-stack support
+            can safely ignore this parameter. Behavior is undetermined if `z`
+            is not set for an image format with Z-stack support.
+        t
+            The asked timepoint index. Image formats without time support
+            can safely ignore this parameter. Behavior is undetermined if `t`
+            is not set for an image format with time support.
+
+        Returns
+        -------
+        ImagePixels
+        """
+        try:
             return self._format.reader.read_thumb(
                 out_width, out_height, precomputed=precomputed, c=c, z=z, t=t
             )
-        else:
-            # TODO
-            raise NotImplementedError
+        except NotImplementedError as e:
+            # Get thumbnail from window ?
+            raise e
 
-    def label(self, out_width, out_height):
+    def label(self, out_width: int, out_height: int) -> Optional[ImagePixels]:
         """
-        Get associated image "label". The output dimensions are best-effort.
-        """
-        if self.associated_label.exists and hasattr(self._format.reader, "read_label"):
-            return self._format.reader.read_label(out_width, out_height)
-        else:
-            return None
+        Get a precomputed image label whose output dimensions are the nearest
+        possible to asked output dimensions.
 
-    def macro(self, out_width, out_height):
-        """
-        Get associated image "macro". The output dimensions are best-effort.
-        """
-        if self.associated_macro.exists and hasattr(self._format.reader, "read_macro"):
-            return self._format.reader.read_macro(out_width, out_height)
-        else:
-            return None
+        Output dimensions are best-effort, that is, depending on the format,
+        the image pyramid characteristics, and the underlying library used to
+        extract pixels from the image format, it may or may not be possible to
+        return a label at the asked output dimensions. In all cases:
+        * `true_out_width >= out_width`
+        * `true_out_height >= out_height`
 
-    def check_integrity(
-        self, lazy_mode=False, metadata=True, tile=False, thumb=False, window=False,
-        associated=False
-    ):
-        """
-        Check integrity of the image. In lazy mode, stop at first error.
+        Parameters
+        ----------
+        out_width
+            The asked output width (best-effort)
+        out_height
+            The asked output height (best-effort)
 
         Returns
         -------
-        errors : list of tuple (str, Exception)
+        ImagePixels
+        """
+        if not self.associated_label.exists:
+            return None
+        try:
+            return self._format.reader.read_label(out_width, out_height)
+        except NotImplementedError:
+            return None
+
+    def macro(self, out_width: int, out_height: int) -> Optional[ImagePixels]:
+        """
+        Get a precomputed image macro whose output dimensions are the nearest
+        possible to asked output dimensions.
+
+        Output dimensions are best-effort, that is, depending on the format,
+        the image pyramid characteristics, and the underlying library used to
+        extract pixels from the image format, it may or may not be possible to
+        return a macro at the asked output dimensions. In all cases:
+        * `true_out_width >= out_width`
+        * `true_out_height >= out_height`
+
+        Parameters
+        ----------
+        out_width
+            The asked output width (best-effort)
+        out_height
+            The asked output height (best-effort)
+
+        Returns
+        -------
+        ImagePixels
+        """
+        if not self.associated_macro.exists:
+            return None
+        try:
+            return self._format.reader.read_macro(out_width, out_height)
+        except NotImplementedError:
+            return None
+
+    def check_integrity(
+        self, lazy_mode: bool = False, check_metadata: bool = True,
+        check_tile: bool = False, check_thumb: bool = False,
+        check_window: bool = False, check_associated: bool = False
+    ) -> List[Tuple[str, Exception]]:
+        """
+        Check integrity of the image: ensure that asked checks do not raise
+        errors. In lazy mode, stop at first error.
+
+        Returns
+        -------
+        errors
             A list of problematic attributes with the associated exception.
-            Some attributes are inter-dependent, so the same exception can appear for several
-            attributes.
+            Some attributes are inter-dependent, so the same exception can
+            appear for several attributes.
         """
         errors = []
-        if metadata:
-            attributes = ('width', 'height', 'depth', 'duration', 'n_channels', 'pixel_type',
-                          'physical_size_x', 'physical_size_y', 'physical_size_z', 'frame_rate',
-                          'description', 'acquisition_datetime', 'channels', 'objective',
-                          'microscope',
-                          'associated_thumb', 'associated_label', 'associated_macro',
-                          'raw_metadata', 'pyramid')
+
+        if check_metadata:
+            attributes = (
+                'width', 'height', 'depth', 'duration', 'n_channels',
+                'pixel_type', 'physical_size_x', 'physical_size_y',
+                'physical_size_z', 'frame_rate', 'description',
+                'acquisition_datetime', 'channels', 'objective', 'microscope',
+                'associated_thumb', 'associated_label', 'associated_macro',
+                'raw_metadata', 'annotations', 'pyramid'
+            )
             for attr in attributes:
                 try:
                     getattr(self, attr)
@@ -288,4 +461,59 @@ class Image(Path):
                     errors.append((attr, e))
                     if lazy_mode:
                         return errors
+
+        if check_tile:
+            try:
+                tier_idx = self.pyramid.max_zoom // 2
+                tier = self.pyramid.tiers[tier_idx]
+                tx = tier.max_tx // 2
+                ty = tier.max_ty // 2
+                self.tile(Tile(tier, tx, ty))
+            except Exception as e:
+                errors.append(('tile', e))
+                if lazy_mode:
+                    return errors
+
+        if check_thumb:
+            try:
+                self.thumbnail(128, 128)
+            except Exception as e:
+                errors.append(('thumbnail', e))
+                if lazy_mode:
+                    return errors
+
+        if check_window:
+            try:
+                w = round(0.1 * self.width)
+                h = round(0.1 * self.height)
+                self.window(
+                    Region(self.height - h, self.width - w, w, h), 128, 128
+                )
+            except Exception as e:
+                errors.append(('window', e))
+                if lazy_mode:
+                    return errors
+
+        if check_associated:
+            try:
+                self.thumbnail(128, 128, precomputed=True)
+            except Exception as e:
+                errors.append(('precomputed_thumbnail', e))
+                if lazy_mode:
+                    return errors
+
+            try:
+                self.label(128, 128)
+            except Exception as e:
+                errors.append(('label', e))
+                if lazy_mode:
+                    return errors
+
+            try:
+                self.macro(128, 128)
+            except Exception as e:
+                errors.append(('macro', e))
+                if lazy_mode:
+                    return errors
+
         return errors

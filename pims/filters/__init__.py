@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from importlib import import_module
 from inspect import isabstract, isclass
 from pkgutil import iter_modules
+from typing import Dict, Type
 
 from pims.processing.operations import ImageOp
 
@@ -29,7 +30,7 @@ logger = logging.getLogger("pims.app")
 logger.info("[green bold]Filters initialization...")
 
 
-class AbstractFilter(ABC, ImageOp):
+class AbstractFilter(ImageOp, ABC):
     def __init__(self, histogram=None):
         super(AbstractFilter, self).__init__()
 
@@ -172,6 +173,9 @@ def _get_all_filters():
         filters.extend(_find_filters_in_module(module_name))
 
     return filters
+
+
+FiltersById = Dict[str, Type[AbstractFilter]]
 
 
 FILTER_PLUGINS = _discover_filter_plugins()

@@ -12,9 +12,11 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import re
+import typing
 from collections import OrderedDict
 from enum import Enum
 from functools import cached_property
+from typing import List, Optional, Tuple
 
 from fastapi.params import Path as PathParam
 
@@ -26,6 +28,10 @@ class OutputExtension(str, Enum):
     JPEG = ".jpg"
     PNG = ".png"
     WEBP = ".webp"
+
+
+SupportedMimeTypes = typing.OrderedDict[str, OutputExtension]
+SupportedExtensions = typing.OrderedDict[OutputExtension, str]
 
 
 mimetype_from_extension = {
@@ -47,7 +53,7 @@ JPEG_MIMETYPES = {
 }
 
 
-def build_mimetype_dict(*mimetype_dicts):
+def build_mimetype_dict(*mimetype_dicts) -> SupportedMimeTypes:
     """Build an ordered dict from a list of dicts.
     Order in these sub-dictionaries is not guaranteed.
     """
@@ -68,9 +74,7 @@ minor_type_str = r'[a-zA-Z0-9._+-]+'
 
 # Matches either '*', 'image/*', or 'image/png'
 valid_mime_type = re.compile(
-    r'^(?:\*|{major_type}/\*|{major_type}/{minor_type})$'.format(
-        major_type=major_type_str, minor_type=minor_type_str
-    )
+    fr'^(?:\*|{major_type_str}/\*|{major_type_str}/{minor_type_str})$'
 )
 
 # Matches the 'q=1.23' from the parameters of a Accept mime types
@@ -86,13 +90,13 @@ class AcceptableType:
         self.weight = self._parse_weight(tail)
 
     @staticmethod
-    def _parse_mimetype(mimetype):
+    def _parse_mimetype(mimetype: str) -> str:
         if not valid_mime_type.match(mimetype):
             raise ValueError(f"{mimetype} is not a valid mime type")
         return mimetype
 
     @staticmethod
-    def _parse_weight(weight):
+    def _parse_weight(weight: str) -> float:
         q = re.search(q_match, weight)
         if q:
             try:
@@ -101,11 +105,11 @@ class AcceptableType:
                 pass
         return 1
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return isinstance(other, AcceptableType) and \
                (self.mimetype, self.weight) == (other.mimetype, other.weight)
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         if not isinstance(other, AcceptableType):
             return NotImplemented
         return self.weight < other.weight
@@ -121,11 +125,11 @@ class AcceptableType:
         # All other cases, match the exact mime type string
         return re.compile('^' + re.escape(self.mimetype) + '$')
 
-    def matches(self, mimetype):
+    def matches(self, mimetype: str):
         return self.pattern.match(mimetype)
 
 
-def parse_accept_header(header):
+def parse_accept_header(header: str) -> List[AcceptableType]:
     """
     Parse an ``Accept`` header into a sorted list of acceptable types
     """
@@ -140,7 +144,7 @@ def parse_accept_header(header):
     return sorted(mime_types, reverse=True)
 
 
-def get_best_mimetype(header, available_types):
+def get_best_mimetype(header: str, available_types: List[str]) -> Optional[str]:
     """
     Find the best mime type to respond to a request with,
     from an ``Accept`` header and list of response mime types
@@ -156,23 +160,26 @@ def get_best_mimetype(header, available_types):
     return None
 
 
-def get_output_format(extension, accept_header, supported):
+def get_output_format(
+    extension: OutputExtension, accept_header: str,
+    supported: SupportedMimeTypes
+) -> Tuple[OutputExtension, str]:
     """
     Get the best output/response format and mime type according to
     the request and the ordered dictionary of supported mime types.
 
     Parameters
     ----------
-    extension : OutputExtension
-    accept_header : str
-    supported : OrderedDict
+    extension
+    accept_header
+    supported
         Ordered dictionary of supported mime types.
 
     Returns
     -------
-    output_format : str
+    output_format
         PIMS slug for the best match
-    output_mimetype : str
+    output_mimetype
         Mime type associated to the output format
 
     Raises
@@ -183,7 +190,7 @@ def get_output_format(extension, accept_header, supported):
     if extension and extension in mimetype_from_extension:
         response_mimetype = mimetype_from_extension.get(extension)
     else:
-        response_mimetype = get_best_mimetype(accept_header, supported.keys())
+        response_mimetype = get_best_mimetype(accept_header, list(supported.keys()))
 
     output_format = supported.get(response_mimetype)
     if output_format:

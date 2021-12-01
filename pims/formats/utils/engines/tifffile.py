@@ -13,15 +13,20 @@
 #  * limitations under the License.
 from datetime import datetime
 from enum import Enum
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
-from tifffile import TiffTag, tifffile
+from pint import Quantity
+from tifffile import TiffPage, TiffTag, tifffile
 
-from pims import UNIT_REGISTRY
-from pims.formats.utils.abstract import AbstractParser
+from pims.formats import AbstractFormat
+from pims.formats.utils.abstract import CachedDataPath
 from pims.formats.utils.checker import SignatureChecker
-from pims.formats.utils.metadata import ImageChannel, ImageMetadata, parse_datetime
-from pims.formats.utils.pyramid import Pyramid
+from pims.formats.utils.parser import AbstractParser
+from pims.formats.utils.structures.metadata import ImageChannel, ImageMetadata, MetadataStore
+from pims.formats.utils.structures.pyramid import Pyramid
+from pims.utils import UNIT_REGISTRY
+from pims.utils.types import parse_datetime
 
 TIFF_FLAGS = (
     'geotiff',
@@ -52,16 +57,20 @@ def read_tifffile(path, silent_fail=True):
     return tf
 
 
-def cached_tifffile(format):
-    return format.get_cached('_tf', read_tifffile, format.path.resolve(), silent_fail=True)
+def cached_tifffile(
+    format: Union[AbstractFormat, CachedDataPath]
+) -> tifffile.TiffFile:
+    return format.get_cached(
+        '_tf', read_tifffile, format.path.resolve(), silent_fail=True
+    )
 
 
-def cached_tifffile_baseline(format):
+def cached_tifffile_baseline(format: AbstractFormat) -> TiffPage:
     tf = cached_tifffile(format)
     return format.get_cached('_tf_baseline', tf.pages.__getitem__, 0)
 
 
-def get_tifftag_value(tag):
+def get_tifftag_value(tag: Union[TiffTag, Any]) -> Any:
     if isinstance(tag, TiffTag):
         return tag.value
     else:
@@ -69,13 +78,12 @@ def get_tifftag_value(tag):
 
 
 class TifffileChecker(SignatureChecker):
-
     @classmethod
-    def get_tifffile(cls, pathlike):
+    def get_tifffile(cls, pathlike: CachedDataPath):
         return cached_tifffile(pathlike)
 
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         buf = cls.get_signature(pathlike)
         if not (len(buf) > 2 and (
                 buf[0] == buf[1] == 0x49 or
@@ -87,10 +95,10 @@ class TifffileChecker(SignatureChecker):
 
 class TifffileParser(AbstractParser):
     @property
-    def baseline(self):
+    def baseline(self) -> TiffPage:
         return cached_tifffile_baseline(self.format)
 
-    def parse_main_metadata(self):
+    def parse_main_metadata(self) -> ImageMetadata:
         baseline = self.baseline
 
         imd = ImageMetadata()
@@ -114,7 +122,7 @@ class TifffileParser(AbstractParser):
 
         return imd
 
-    def parse_known_metadata(self):
+    def parse_known_metadata(self) -> ImageMetadata:
         imd = super().parse_known_metadata()
         baseline = self.baseline
         tags = baseline.tags
@@ -131,7 +139,9 @@ class TifffileParser(AbstractParser):
         return imd
 
     @staticmethod
-    def parse_acquisition_date(date):
+    def parse_acquisition_date(
+        date: Union[datetime, str, TiffTag]
+    ) -> Union[datetime, None]:
         """
         Parse a date(time) from a TiffTag to datetime.
 
@@ -153,18 +163,12 @@ class TifffileParser(AbstractParser):
             return parse_datetime(date, raise_exc=False)
 
     @staticmethod
-    def parse_physical_size(physical_size, unit=None):
+    def parse_physical_size(
+        physical_size: Union[Tuple, float, TiffTag],
+        unit: Optional[tifffile.TIFF.RESUNIT] = None
+    ) -> Union[Quantity, None]:
         """
         Parse a physical size and its unit from a TiffTag to a Quantity.
-
-        Parameters
-        ----------
-        physical_size: tuple, int, float, TiffTag
-        unit: tifffile.RESUNIT
-
-        Returns
-        -------
-        physical_size: Quantity
         """
         physical_size = get_tifftag_value(physical_size)
         unit = get_tifftag_value(unit)
@@ -180,7 +184,7 @@ class TifffileParser(AbstractParser):
             return None
         return rational[1] / rational[0] * UNIT_REGISTRY(unit.name.lower())
 
-    def parse_raw_metadata(self):
+    def parse_raw_metadata(self) -> MetadataStore:
         baseline = cached_tifffile_baseline(self.format)
         store = super().parse_raw_metadata()
 
@@ -192,11 +196,14 @@ class TifffileParser(AbstractParser):
         for tag in baseline.tags:
             if tag.code not in skipped_tags and \
                     type(tag.value) not in (bytes, np.ndarray):
-                value = tag.value.name if isinstance(tag.value, Enum) else tag.value
+                if isinstance(tag.value, Enum):
+                    value = tag.value.name
+                else:
+                    value = tag.value
                 store.set(tag.name, value, namespace="TIFF")
         return store
 
-    def parse_pyramid(self):
+    def parse_pyramid(self) -> Pyramid:
         image = cached_tifffile(self.format)
         base_series = image.series[0]
 

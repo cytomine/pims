@@ -18,26 +18,34 @@ from starlette.responses import Response
 
 from pims.api.exceptions import check_representation_existence
 from pims.api.utils.header import ImageRequestHeaders, add_image_size_limit_header
-from pims.api.utils.image_parameter import (
-    check_array_size, check_reduction_validity, ensure_list,
-    get_channel_indexes, get_thumb_output_dimensions, get_timepoint_indexes, get_zslice_indexes,
-    parse_colormap_ids, parse_filter_ids, parse_intensity_bounds, safeguard_output_dimensions
+from pims.api.utils.input_parameter import (
+    check_reduction_validity, get_channel_indexes, get_timepoint_indexes,
+    get_zslice_indexes
 )
 from pims.api.utils.mimetype import (
     OutputExtension, VISUALISATION_MIMETYPES,
     extension_path_parameter, get_output_format
 )
 from pims.api.utils.models import (
-    ImageOpsDisplayQueryParams, ImageOutDisplayQueryParams,
+    ChannelReduction, ImageOpsDisplayQueryParams, ImageOutDisplayQueryParams,
     PlaneSelectionQueryParams, ThumbnailRequest
 )
+from pims.api.utils.output_parameter import (
+    get_thumb_output_dimensions,
+    safeguard_output_dimensions
+)
 from pims.api.utils.parameter import imagepath_parameter
+from pims.api.utils.processing_parameter import (
+    parse_colormap_ids, parse_filter_ids,
+    parse_intensity_bounds
+)
 from pims.cache import cache_image_response
 from pims.config import Settings, get_settings
 from pims.files.file import Path
 from pims.filters import FILTERS
 from pims.processing.colormaps import ALL_COLORMAPS
 from pims.processing.image_response import ThumbnailResponse
+from pims.utils.iterables import check_array_size, ensure_list
 
 router = APIRouter()
 api_tags = ['Thumbnails']
@@ -102,7 +110,7 @@ async def show_thumb_with_body(
 
 @cache_image_response(expire=cache_ttl, vary=['config', 'request', 'response'])
 def _show_thumb(
-    request: Request, response: Response,  # required for @cache
+    request: Request, response: Response,  # required for @cache  # noqa
     path: Path,
     height, width, length,
     channels, z_slices, timepoints,
@@ -111,7 +119,7 @@ def _show_thumb(
     extension,
     headers,
     config: Settings,
-    colormaps, c_reduction="ADD", z_reduction=None, t_reduction=None
+    colormaps, c_reduction=ChannelReduction.ADD, z_reduction=None, t_reduction=None
 ):
     in_image = path.get_spatial()
     check_representation_existence(in_image)

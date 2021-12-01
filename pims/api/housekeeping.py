@@ -107,11 +107,11 @@ class DiskUsageLegacy(BaseModel):
 
 
 @router.get('/storage/size.json', response_model=DiskUsageLegacy, tags=api_tags)
-def show_disk_usage_v1():
+def show_disk_usage_v1(config: Settings = Depends(get_settings)):
     """
     Get storage space (v1.x)
     """
-    data = show_disk_usage()
+    data = _serialize_usage(filepath2path(".", config))
     return {
         "available": data.mount_available_size,
         "used": data.mount_used_size,

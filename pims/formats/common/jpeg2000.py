@@ -16,22 +16,23 @@ from functools import cached_property
 
 from pyvips import Image as VIPSImage
 
-from pims import UNIT_REGISTRY
 from pims.formats import AbstractFormat
+from pims.formats.common.jpeg import JPEGParser
+from pims.formats.utils.abstract import CachedDataPath
 from pims.formats.utils.checker import SignatureChecker
 from pims.formats.utils.engines.vips import (
-    VipsHistogramReader, VipsParser, VipsReader,
+    VipsReader,
     VipsSpatialConvertor, cached_vips_file
 )
-from pims.formats.utils.metadata import parse_datetime, parse_float
-from pims.formats.utils.pyramid import Pyramid
+from pims.formats.utils.histogram import DefaultHistogramReader
+from pims.formats.utils.structures.pyramid import Pyramid
 
 log = logging.getLogger("pims.formats")
 
 
 class JPEG2000Checker(SignatureChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         buf = cls.get_signature(pathlike)
         return (len(buf) > 50
                 and buf[0] == 0x00
@@ -46,47 +47,8 @@ class JPEG2000Checker(SignatureChecker):
                 and buf[3] == 0x51)
 
 
-class JPEG2000Parser(VipsParser):
-    @staticmethod
-    def parse_physical_size(physical_size, unit):
-        supported_units = ("meters", "inches", "cm")
-        if physical_size is not None and parse_float(physical_size) is not None \
-                and unit in supported_units:
-            return parse_float(physical_size) * UNIT_REGISTRY(unit)
-        return None
-
-    def parse_known_metadata(self):
-        # Tags reference: https://exiftool.org/TagNames/JPEG.html
-        imd = super().parse_known_metadata()
-        raw = self.format.raw_metadata
-
-        desc_fields = ("File.Comment", "EXIF.ImageDescription", "EXIF.UserComment")
-        imd.description = raw.get_first_value(desc_fields)
-
-        date_fields = ("EXIF.CreationDate", "EXIF.DateTimeOriginal", "EXIF.ModifyDate")
-        imd.acquisition_datetime = parse_datetime(raw.get_first_value(date_fields))
-
-        imd.physical_size_x = self.parse_physical_size(
-            raw.get_value("EXIF.XResolution"),
-            raw.get_value("EXIF.ResolutionUnit")
-        )
-        imd.physical_size_y = self.parse_physical_size(
-            raw.get_value("EXIF.YResolution"),
-            raw.get_value("EXIF.ResolutionUnit")
-        )
-        if imd.physical_size_x is None and imd.physical_size_y is None:
-            imd.physical_size_x = self.parse_physical_size(
-                raw.get_value("JFIF.XResolution"),
-                raw.get_value("JFIF.ResolutionUnit")
-            )
-            imd.physical_size_y = self.parse_physical_size(
-                raw.get_value("JFIF.YResolution"),
-                raw.get_value("JFIF.ResolutionUnit")
-            )
-        imd.is_complete = True
-        return imd
-
-    def parse_pyramid(self):
+class JPEG2000Parser(JPEGParser):
+    def parse_pyramid(self) -> Pyramid:
         imd = self.format.main_imd
         p = Pyramid()
         p.insert_tier(
@@ -108,12 +70,16 @@ class JPEG2000Reader(VipsReader):
     # (i.e it loads the right pyramid level according the requested dimensions)
 
     def read_window(self, region, out_width, out_height, **other):
-        tier = self.format.pyramid.most_appropriate_tier(region, (out_width, out_height))
+        tier = self.format.pyramid.most_appropriate_tier(
+            region, (out_width, out_height)
+        )
         region = region.scale_to_tier(tier)
 
         page = tier.data.get('page_index')
         tiff_page = VIPSImage.jp2kload(str(self.format.path), page=page)
-        return tiff_page.extract_area(region.left, region.top, region.width, region.height)
+        return tiff_page.extract_area(
+            region.left, region.top, region.width, region.height
+        )
 
     def read_tile(self, tile, **other):
         tier = tile.tier
@@ -125,7 +91,9 @@ class JPEG2000Reader(VipsReader):
         # that has to be read is read.
         # https://github.com/jcupitt/tilesrv/blob/master/tilesrv.c#L461
         # TODO: is direct tile access significantly faster ?
-        return tiff_page.extract_area(tile.left, tile.top, tile.width, tile.height)
+        return tiff_page.extract_area(
+            tile.left, tile.top, tile.width, tile.height
+        )
 
 
 class JPEG2000Format(AbstractFormat):
@@ -142,7 +110,7 @@ class JPEG2000Format(AbstractFormat):
     checker_class = JPEG2000Checker
     parser_class = JPEG2000Parser
     reader_class = JPEG2000Reader
-    histogram_reader_class = VipsHistogramReader
+    histogram_reader_class = DefaultHistogramReader
     convertor_class = VipsSpatialConvertor
 
     def __init__(self, *args, **kwargs):

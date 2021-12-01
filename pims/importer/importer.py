@@ -13,9 +13,10 @@
 #  * limitations under the License.
 import logging
 import shutil
+from typing import List, Optional
 
 from celery import group, signature
-from celery.result import allow_join_result
+from celery.result import allow_join_result  # noqa
 
 from pims.api.exceptions import (
     BadRequestException, FilepathNotFoundProblem,
@@ -26,12 +27,18 @@ from pims.config import get_settings
 from pims.files.archive import Archive, ArchiveError
 from pims.files.file import (
     EXTRACTED_DIR, HISTOGRAM_STEM, ORIGINAL_STEM, PROCESSED_DIR, Path,
-    SPATIAL_STEM, UPLOAD_DIR_PREFIX, unique_name_generator
+    SPATIAL_STEM, UPLOAD_DIR_PREFIX
 )
-from pims.files.histogram import build_histogram_file
+from pims.files.histogram import Histogram
 from pims.files.image import Image
+from pims.formats import AbstractFormat
 from pims.formats.utils.factories import FormatFactory, SpatialReadableFormatFactory
-from pims.importer.listeners import CytomineListener, ImportEventType, StdoutListener
+from pims.importer.listeners import (
+    CytomineListener, ImportEventType, ImportListener,
+    StdoutListener
+)
+from pims.processing.histograms.utils import build_histogram_file
+from pims.utils.strings import unique_name_generator
 
 log = logging.getLogger("pims.app")
 
@@ -55,21 +62,50 @@ class FileImporter:
     """
     Image importer from file. It moves a pending file to PIMS root path, tries to
     identify the file format, converts it if needed and checks its integrity.
-
-    Attributes
-    ----------
-    pending_file : Path
-        A file to import from PENDING_PATH directory
-    pending_name : str (optional)
-        A name to use for the pending file.
-        If not provided, the current pending file name is used.
-    loggers : list of ImportLogger (optional)
-        A list of import loggers
-
     """
 
-    def __init__(self, pending_file, pending_name=None, loggers=None):
-        self.loggers = loggers if loggers is not None else []
+    listeners: List[ImportListener]
+
+    # Pending file (not yet in `FILE_ROOT_PATH`)
+    pending_file: Path
+    pending_name: Optional[str]
+
+    # Paths to directories for the current import (in `FILE_ROOT_PATH`)
+    upload_dir: Optional[Path]
+    processed_dir: Optional[Path]
+    extracted_dir: Optional[Path]
+
+    # Path to upload file (in `upload_dir`)
+    upload_path: Optional[Path]
+
+    # Original representation path (& image) (in `processed_dir`)
+    original_path: Optional[Path]
+    original: Optional[Image]
+
+    # Spatial representation path (& image) (in `processed_dir`)
+    spatial_path: Optional[Path]
+    spatial: Optional[Image]
+
+    # Histogram representation path (& histogram) (in `processed_dir`)
+    histogram_path: Optional[Path]
+    histogram: Optional[Histogram]
+
+    def __init__(
+        self, pending_file: Path, pending_name: Optional[str] = None,
+        listeners: Optional[List[ImportListener]] = None
+    ):
+        """
+        Parameters
+        ----------
+        pending_file
+            A file to import from PENDING_PATH directory
+        pending_name
+            A name to use for the pending file.
+            If not provided, the current pending file name is used.
+        listeners
+            A list of import listeners
+        """
+        self.listeners = listeners if listeners is not None else []
         self.pending_file = pending_file
         self.pending_name = pending_name
 
@@ -85,14 +121,14 @@ class FileImporter:
         self.processed_dir = None
         self.extracted_dir = None
 
-    def notify(self, method, *args, **kwargs):
-        for logger in self.loggers:
+    def notify(self, method: ImportEventType, *args, **kwargs):
+        for listener in self.listeners:
             try:
-                getattr(logger, method)(*args, **kwargs)
+                getattr(listener, method)(*args, **kwargs)
             except AttributeError:
-                log.warning(f"No method {method} for import logger {logger}")
+                log.warning(f"No method {method} for import listener {listener}")
 
-    def run(self, prefer_copy=False):
+    def run(self, prefer_copy: bool = False):
         """
         Import the pending file. It moves a pending file to PIMS root path, tries to
         identify the file format, converts it if needed and checks its integrity.
@@ -101,11 +137,6 @@ class FileImporter:
         ----------
         prefer_copy : bool
             Prefer copy the pending file instead of moving it. Useful for tests.
-
-        Returns
-        -------
-        images : list of Image
-            A list of images imported from the pending file.
 
         Raises
         ------
@@ -226,7 +257,7 @@ class FileImporter:
             # Check original image integrity
             self.notify(ImportEventType.START_INTEGRITY_CHECK, self.original_path)
             self.original = Image(self.original_path, format=format)
-            errors = self.original.check_integrity(metadata=True)
+            errors = self.original.check_integrity(check_metadata=True)
             if len(errors) > 0:
                 self.notify(
                     ImportEventType.ERROR_INTEGRITY_CHECK, self.original_path,
@@ -255,7 +286,11 @@ class FileImporter:
             )
             raise e
 
-    def deploy_spatial(self, format):
+    def deploy_spatial(self, format: AbstractFormat) -> Image:
+        """
+        Deploy a spatial representation of the image so that it can be used for
+        efficient spatial requests.
+        """
         self.notify(ImportEventType.START_SPATIAL_DEPLOY, self.original_path)
         if format.need_conversion:
             # Do the spatial conversion
@@ -299,7 +334,7 @@ class FileImporter:
 
             # Check spatial image integrity
             self.notify(ImportEventType.START_INTEGRITY_CHECK, self.spatial_path)
-            errors = self.spatial.check_integrity(metadata=True)
+            errors = self.spatial.check_integrity(check_metadata=True)
             if len(errors) > 0:
                 self.notify(
                     ImportEventType.ERROR_INTEGRITY_CHECK, self.spatial_path,
@@ -319,7 +354,11 @@ class FileImporter:
         self.notify(ImportEventType.END_SPATIAL_DEPLOY, self.spatial)
         return self.spatial
 
-    def deploy_histogram(self, image):
+    def deploy_histogram(self, image: Image) -> Histogram:
+        """
+        Deploy an histogram representation of the image so that it can be used for
+        efficient histogram requests.
+        """
         self.histogram_path = self.processed_dir / Path(HISTOGRAM_STEM)
         self.notify(
             ImportEventType.START_HISTOGRAM_DEPLOY,
@@ -343,6 +382,7 @@ class FileImporter:
         return self.histogram
 
     def mkdir(self, directory: Path):
+        """Make a directory (with notifications)"""
         try:
             directory.mkdir()  # TODO: mode
         except (FileNotFoundError, FileExistsError, OSError) as e:
@@ -350,6 +390,7 @@ class FileImporter:
             raise FileErrorProblem(directory)
 
     def move(self, origin: Path, dest: Path, prefer_copy: bool = False):
+        """Move origin to dest (with notifications)"""
         try:
             if prefer_copy:
                 shutil.copy(origin, dest)
@@ -360,6 +401,7 @@ class FileImporter:
             raise FileErrorProblem(origin)
 
     def mksymlink(self, path: Path, target: Path):
+        """Make a symlink from path to target (with notifications)"""
         try:
             path.symlink_to(
                 target,
@@ -369,11 +411,12 @@ class FileImporter:
             self.notify(ImportEventType.FILE_ERROR, path, exception=e)
             raise FileErrorProblem(path)
 
-    def import_collection(self, collection, prefer_copy=False):
+    def import_collection(self, collection: Path, prefer_copy: bool = False):
+        """Import recursively children of the collection."""
         cytomine = None
-        for logger in self.loggers:
-            if isinstance(logger, CytomineListener):
-                cytomine = logger
+        for listener in self.listeners:
+            if isinstance(listener, CytomineListener):
+                cytomine = listener
                 break
         if cytomine:
             task = "pims.tasks.worker.run_import_with_cytomine"
@@ -383,7 +426,12 @@ class FileImporter:
         imported = list()
         format_factory = FormatFactory()
         tasks = list()
-        for child in collection.get_extracted_children(stop_recursion_cond=format_factory.match):
+        # Collection children are extracted recursively into collection
+        # directories, until the directory is an image format (we can thus have
+        # multi-file formats as directories in a collection).
+        for child in collection.get_extracted_children(
+                stop_recursion_cond=format_factory.match
+        ):
             self.notify(
                 ImportEventType.REGISTER_FILE, child, self.upload_path
             )
@@ -391,7 +439,8 @@ class FileImporter:
                 if cytomine:
                     new_listener = cytomine.new_listener_from_registered_child(child)
                     args = [
-                        new_listener.auth, str(child), child.name, new_listener, prefer_copy
+                        new_listener.auth, str(child), child.name,
+                        new_listener, prefer_copy
                     ]
                 else:
                     args = [str(child), child.name, prefer_copy]
@@ -417,7 +466,10 @@ class FileImporter:
         return imported
 
 
-def run_import(filepath, name, extra_listeners=None, prefer_copy=False):
+def run_import(
+    filepath: str, name: str, extra_listeners: Optional[List[ImportListener]] = None,
+    prefer_copy: bool = False
+):
     pending_file = Path(filepath)
 
     if extra_listeners is not None:

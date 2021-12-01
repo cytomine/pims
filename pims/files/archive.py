@@ -14,7 +14,9 @@
 
 import shutil
 import sys
+from collections import Callable
 from functools import lru_cache
+from typing import List, Optional
 from zipfile import ZipFile
 
 from pims.api.exceptions import NoMatchingFormatProblem
@@ -26,24 +28,24 @@ class ArchiveError(OSError):
 
 
 class ArchiveFormat:
-    def __init__(self, name, description, match):
+    def __init__(self, name: str, description: str, match: Callable):
         self.name = name
         self.description = description
         self.match = match
 
-    def get_identifier(self, uppercase=True):
+    def get_identifier(self, uppercase: bool = True) -> str:
         if uppercase:
             return self.name.upper()
         return self.name
 
-    def get_name(self):
+    def get_name(self) -> str:
         return self.get_identifier(False)
 
-    def get_remarks(self):
+    def get_remarks(self) -> str:
         return self.description
 
 
-def zip_match(signature):
+def zip_match(signature: bytearray) -> bool:
     return (len(signature) > 3 and
             signature[0] == 0x50 and signature[1] == 0x4B and
             (signature[2] == 0x3 or signature[2] == 0x5 or
@@ -52,7 +54,7 @@ def zip_match(signature):
              signature[3] == 0x8))
 
 
-def tar_match(signature):
+def tar_match(signature: bytearray) -> bool:
     return (len(signature) > 261 and
             signature[257] == 0x75 and
             signature[258] == 0x73 and
@@ -61,21 +63,21 @@ def tar_match(signature):
             signature[261] == 0x72)
 
 
-def gztar_match(signature):
+def gztar_match(signature: bytearray) -> bool:
     return (len(signature) > 2 and
             signature[0] == 0x1F and
             signature[1] == 0x8B and
             signature[2] == 0x8)
 
 
-def bztar_match(signature):
+def bztar_match(signature: bytearray) -> bool:
     return (len(signature) > 2 and
             signature[0] == 0x42 and
             signature[1] == 0x5A and
             signature[2] == 0x68)
 
 
-def xztar_match(signature):
+def xztar_match(signature: bytearray) -> bool:
     return (len(signature) > 5 and
             signature[0] == 0xFD and
             signature[1] == 0x37 and
@@ -86,7 +88,7 @@ def xztar_match(signature):
 
 
 @lru_cache
-def _build_archive_format_list():
+def _build_archive_format_list() -> List[ArchiveFormat]:
     formats = []
     extensions = shutil.get_archive_formats()
     for name, description in extensions:
@@ -101,7 +103,7 @@ ARCHIVE_FORMATS = _build_archive_format_list()
 
 
 class Archive(Path):
-    def __init__(self, *pathsegments, format=None):
+    def __init__(self, *pathsegments, format: Optional[ArchiveFormat] = None):
         super().__init__(pathsegments)
 
         _format = None
@@ -119,7 +121,7 @@ class Archive(Path):
         else:
             self._format = _format
 
-    def extract(self, path: Path, clean=True):
+    def extract(self, path: Path, clean: bool = True):
         """
         Extract the archive content.
 
@@ -156,11 +158,17 @@ class Archive(Path):
             return None
 
     @property
-    def format(self):
+    def format(self) -> ArchiveFormat:
         return self._format
 
 
-def make_zip_archive(archive_path, content_path):
+def make_zip_archive(archive_path: Path, content_path: Path) -> ZipFile:
+    """
+    Make a zip archive at `archive_path` location with `content_path`
+    inside.
+
+    Note: cannot use `shutil` to write archives as it is not thread safe !
+    """
     def walk(path):
         for p in Path(path).iterdir():
             if p.is_dir():
@@ -168,8 +176,8 @@ def make_zip_archive(archive_path, content_path):
                 continue
             yield p.resolve()
 
-    with ZipFile(archive_path, 'w') as zip:
+    with ZipFile(archive_path, 'w') as zipf:
         for file in walk(content_path):
-            zip.write(file, file.relative_to(content_path))
+            zipf.write(file, file.relative_to(content_path))
 
-    return zip
+    return zipf

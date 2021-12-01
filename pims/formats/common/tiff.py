@@ -16,17 +16,17 @@ from functools import cached_property
 from pyvips import Image as VIPSImage
 
 from pims.formats import AbstractFormat
+from pims.formats.utils.abstract import CachedDataPath
 from pims.formats.utils.engines.tifffile import TIFF_FLAGS, TifffileChecker, TifffileParser
-from pims.formats.utils.engines.vips import VipsHistogramReader, VipsReader, VipsSpatialConvertor
-
-
+from pims.formats.utils.engines.vips import VipsReader, VipsSpatialConvertor
 # -----------------------------------------------------------------------------
 # PYRAMIDAL TIFF
+from pims.formats.utils.histogram import DefaultHistogramReader
 
 
 class PyrTiffChecker(TifffileChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         if not super().match(pathlike):
             return False
 
@@ -51,12 +51,16 @@ class PyrTiffVipsReader(VipsReader):
     # (i.e it loads the right pyramid level according the requested dimensions)
 
     def read_window(self, region, out_width, out_height, **other):
-        tier = self.format.pyramid.most_appropriate_tier(region, (out_width, out_height))
+        tier = self.format.pyramid.most_appropriate_tier(
+            region, (out_width, out_height)
+        )
         region = region.scale_to_tier(tier)
 
         page = tier.data.get('page_index')
         tiff_page = VIPSImage.tiffload(str(self.format.path), page=page)
-        return tiff_page.extract_area(region.left, region.top, region.width, region.height)
+        return tiff_page.extract_area(
+            region.left, region.top, region.width, region.height
+        )
 
     def read_tile(self, tile, **other):
         tier = tile.tier
@@ -68,14 +72,16 @@ class PyrTiffVipsReader(VipsReader):
         # that has to be read is read.
         # https://github.com/jcupitt/tilesrv/blob/master/tilesrv.c#L461
         # TODO: is direct tile access significantly faster ?
-        return tiff_page.extract_area(tile.left, tile.top, tile.width, tile.height)
+        return tiff_page.extract_area(
+            tile.left, tile.top, tile.width, tile.height
+        )
 
 
 class PyrTiffFormat(AbstractFormat):
     checker_class = PyrTiffChecker
     parser_class = TifffileParser
     reader_class = PyrTiffVipsReader
-    histogram_reader_class = VipsHistogramReader
+    histogram_reader_class = DefaultHistogramReader
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -108,7 +114,7 @@ class PyrTiffFormat(AbstractFormat):
 
 class PlanarTiffChecker(TifffileChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         if not super().match(pathlike):
             return False
 
@@ -117,9 +123,10 @@ class PlanarTiffChecker(TifffileChecker):
             if getattr(tf, 'is_' + name, False):
                 return False
 
-        if len(tf.series) == 1:
+        if len(tf.series) >= 1:
             baseline = tf.series[0]
-            if baseline and not baseline.is_pyramidal and len(baseline.levels) == 1:
+            if baseline and not baseline.is_pyramidal\
+                    and len(baseline.levels) == 1:
                 return True
 
         return False
@@ -129,7 +136,7 @@ class PlanarTiffFormat(AbstractFormat):
     checker_class = PlanarTiffChecker
     parser_class = TifffileParser
     reader_class = VipsReader
-    histogram_reader_class = VipsHistogramReader
+    histogram_reader_class = DefaultHistogramReader
     convertor_class = VipsSpatialConvertor
 
     def __init__(self, *args, **kwargs):
@@ -147,7 +154,7 @@ class PlanarTiffFormat(AbstractFormat):
     @cached_property
     def need_conversion(self):
         imd = self.main_imd
-        return not (imd.width < 1024 and imd.height < 1024)
+        return imd.width > 1024 or imd.height > 1024
 
     @property
     def media_type(self):

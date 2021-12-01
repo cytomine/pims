@@ -3,7 +3,7 @@ Python Image Management Server
 
 ## Run development server with Docker
 
-    docker build -f docker/Dockerfile -t pims .
+    docker build -f docker/backend.dockerfile -t pims .
     docker run -p 5000:5000 pims
 
 The server is running at http://127.0.0.1:5000 and API documentation is available 
@@ -16,7 +16,8 @@ as PIMS requires a lot of low-level dependencies, developing using Docker would 
 ## Run development server locally 
 ### Dependencies
 First, dependencies must be installed
-1. Dependencies in Dockerfile must be installed first. For plugins, prerequisites have to be 
+1. Dependencies in `docker/backend.dockerfile` must be installed first. For plugins, prerequisites 
+   have to be 
    installed manually, especially for `before_vips` and `before_python`. See 
    `install_prerequisites.sh` in respective plugins.
 2. `pip install -r requirements.txt`

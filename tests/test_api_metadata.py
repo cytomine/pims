@@ -18,7 +18,7 @@ from tests.conftest import fake_files_info
 
 @pytest.mark.parametrize("ff", fake_files_info)
 def test_file(client, fake_files, ff):
-    response = client.get("/file/{}/info".format(ff['filepath']))
+    response = client.get(f"/file/{ff['filepath']}/info")
     assert response.status_code == 200
 
     json = response.json()
@@ -37,5 +37,5 @@ def test_file_not_exists(client):
 @pytest.mark.skip(reason="Can only work with true files, need to implement this")
 @pytest.mark.parametrize("ff", fake_files_info)
 def test_image(client, fake_files, ff):
-    response = client.get("/image/{}/info/image".format(ff['filepath']))
+    response = client.get(f"/image/{ff['filepath']}/info/image")
     assert response.status_code == (200 if not ff['collection'] else 404)

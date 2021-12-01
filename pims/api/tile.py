@@ -19,28 +19,35 @@ from starlette.responses import Response
 
 from pims.api.exceptions import BadRequestException, check_representation_existence
 from pims.api.utils.header import ImageRequestHeaders, SafeMode, add_image_size_limit_header
-from pims.api.utils.image_parameter import (
-    check_array_size, check_reduction_validity,
-    check_tilecoord_validity, check_tileindex_validity, ensure_list, get_channel_indexes,
-    get_timepoint_indexes, get_zslice_indexes, parse_colormap_ids, parse_filter_ids,
-    parse_intensity_bounds, safeguard_output_dimensions
+from pims.api.utils.input_parameter import (
+    check_reduction_validity, get_channel_indexes, get_timepoint_indexes,
+    get_zslice_indexes
 )
 from pims.api.utils.mimetype import (
     OutputExtension, VISUALISATION_MIMETYPES,
     extension_path_parameter, get_output_format
 )
 from pims.api.utils.models import (
-    Colorspace, ImageOpsDisplayQueryParams,
+    ChannelReduction, Colorspace, ImageOpsDisplayQueryParams,
     PlaneSelectionQueryParams, TargetLevel, TargetZoom, TargetZoomTileCoordinates,
     TargetZoomTileIndex, TierIndexType, TileIndex, TileRequest, TileX, TileY
 )
+from pims.api.utils.output_parameter import (
+    check_tilecoord_validity, check_tileindex_validity,
+    safeguard_output_dimensions
+)
 from pims.api.utils.parameter import imagepath_parameter
+from pims.api.utils.processing_parameter import (
+    parse_colormap_ids, parse_filter_ids,
+    parse_intensity_bounds
+)
 from pims.cache import cache_image_response
 from pims.config import Settings, get_settings
 from pims.files.file import Path
 from pims.filters import FILTERS
 from pims.processing.colormaps import ALL_COLORMAPS
 from pims.processing.image_response import TileResponse, WindowResponse
+from pims.utils.iterables import check_array_size, ensure_list
 
 router = APIRouter()
 tile_tags = ['Tiles']
@@ -106,14 +113,14 @@ async def show_tile_with_body(
 
 @cache_image_response(expire=cache_ttl, vary=['config', 'request', 'response'])
 def _show_tile(
-    request: Request, response: Response,  # required for @cache
+    request: Request, response: Response,  # required for @cache  # noqa
     path: Path,
     normalized: bool,
     tile: dict,
     channels, z_slices, timepoints,
     min_intensities, max_intensities, filters, gammas, log,
     extension, headers, config,
-    colormaps=None, c_reduction="ADD", z_reduction=None, t_reduction=None
+    colormaps=None, c_reduction=ChannelReduction.ADD, z_reduction=None, t_reduction=None
 ):
     in_image = path.get_spatial()
     check_representation_existence(in_image)
@@ -139,7 +146,7 @@ def _show_tile(
         )
         tile_region = pyramid.get_tier_at(
             reference_tier_index, tier_index_type
-        ).ti2region(tile['ti'])
+        ).get_ti_tile(tile['ti'])
     else:
         check_tilecoord_validity(
             pyramid, tile['tx'], tile['ty'],
@@ -147,7 +154,7 @@ def _show_tile(
         )
         tile_region = pyramid.get_tier_at(
             reference_tier_index, tier_index_type
-        ).txty2region(tile['tx'], tile['ty'])
+        ).get_txty_tile(tile['tx'], tile['ty'])
 
     out_format, mimetype = get_output_format(extension, headers.accept, VISUALISATION_MIMETYPES)
     req_size = tile_region.width, tile_region.height
@@ -360,8 +367,8 @@ async def show_tile_v1(
     y: int,
     z: int,
     ops: ImageOpsDisplayQueryParams = Depends(),
-    mime_type: Optional[str] = Query(None, alias='mimeType'),
-    tile_group: Optional[str] = Query(None, alias='tileGroup'),
+    mime_type: Optional[str] = Query(None, alias='mimeType'),  # noqa
+    tile_group: Optional[str] = Query(None, alias='tileGroup'),  # noqa
     config: Settings = Depends(get_settings)
 ):
     """
@@ -394,7 +401,7 @@ async def show_tile_v2(
     tile_index: Optional[int] = Query(None, alias='tileIndex'),
     ops: ImageOpsDisplayQueryParams = Depends(),
     tile_group: Optional[str] = Query(None, alias='tileGroup'),
-    mime_type: str = Query(None, alias='mimeType'),
+    mime_type: str = Query(None, alias='mimeType'),  # noqa
     config: Settings = Depends(get_settings)
 ):
     """

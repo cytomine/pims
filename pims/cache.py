@@ -12,22 +12,23 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import asyncio
+import copy
 import hashlib
 import inspect
-import typing
 from enum import Enum
 from functools import partial, wraps
-from typing import Callable, Optional, Type
+from typing import Any, Callable, Dict, KeysView, List, Optional, Type, Union
 
 import aioredis
 from fastapi_cache import Coder, FastAPICache, default_key_builder
 from fastapi_cache.backends import Backend
 from fastapi_cache.backends.redis import RedisBackend as RedisBackend_
 from fastapi_cache.coder import JsonCoder, PickleCoder
-from pims.api.utils.mimetype import VISUALISATION_MIMETYPES, get_output_format
-from pims.config import get_settings
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
+
+from pims.api.utils.mimetype import VISUALISATION_MIMETYPES, get_output_format
+from pims.config import get_settings
 
 HEADER_CACHE_CONTROL = "Cache-Control"
 HEADER_ETAG = "ETag"
@@ -158,7 +159,7 @@ def default_cache_control_builder(ttl=0):
 
 def cache(
     expire: int = None,
-    vary: Optional[typing.List] = None,
+    vary: Optional[List] = None,
     codec: Type[Coder] = None,
     key_builder: Callable = None,
     cache_control_builder: Callable = None
@@ -247,7 +248,7 @@ def cache(
 
 def cache_image_response(
     expire: int = None,
-    vary: Optional[typing.List] = None,
+    vary: Optional[List] = None,
     supported_mimetypes=None
 ):
     if supported_mimetypes is None:
@@ -257,3 +258,98 @@ def cache_image_response(
     )
     codec = PickleCoder
     return cache(expire, vary, codec, key_builder)
+
+
+DictCache = Dict[str, Any]
+
+
+class SimpleDataCache:
+    """
+    A simple wrapper to add caching mechanisms to a class.
+    """
+    def __init__(self, existing_cache: DictCache = None):
+        self._cache = dict()
+
+        if existing_cache is dict:
+            self._cache = copy.deepcopy(existing_cache)
+
+    def cache_value(self, key: str, value: Any, force: bool = False):
+        """
+        Cache a value at some key in the cache.
+
+        Parameters
+        ----------
+        key
+            The cache key
+        value
+            The content to cache
+        force
+            Whether to force to re-cache content if key is already cached.
+        """
+        if force or key not in self._cache:
+            self._cache[key] = value
+
+    def cache_func(self, key: str, delayed_func: Callable, *args, **kwargs):
+        """
+        Cache a function result at some key in the cache.
+
+        Parameters
+        ----------
+        key
+            The cache key
+        delayed_func
+            The function to call to get result to cache
+        args
+            The arguments to pass to `delayed_func`
+        kwargs
+            The keyword arguments to pass to `delayed_func`
+        """
+        self.cache_value(key, delayed_func(*args, **kwargs))
+
+    def get_cached(
+        self, key: str, delayed_func_or_value: Union[Callable, Any],
+        *args, **kwargs
+    ) -> Any:
+        """
+        Get cache content at given key, otherwise cache new content for this key.
+
+        Parameters
+        ----------
+        key
+            The cache key
+        delayed_func_or_value
+            If key is not in cache, cache the function result (if it is callable)
+            or the variable content.
+        args
+            The arguments to pass to the delayed function if it is callable
+        kwargs
+            The keyword arguments to pass to the delayed function if it is
+            callable.
+
+        Returns
+        -------
+        content
+            Cached content
+        """
+        if not self.is_in_cache(key):
+            if callable(delayed_func_or_value):
+                delayed_func = delayed_func_or_value
+                self.cache_func(key, delayed_func, *args, **kwargs)
+            else:
+                value = delayed_func_or_value
+                self.cache_value(key, value)
+        return self._cache[key]
+
+    @property
+    def cache(self) -> DictCache:
+        return self._cache
+
+    @property
+    def cached_keys(self) -> KeysView[str]:
+        return self._cache.keys()
+
+    def is_in_cache(self, key) -> bool:
+        return key in self._cache
+
+    def clear_cache(self):
+        self._cache.clear()

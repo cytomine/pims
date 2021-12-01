@@ -13,25 +13,29 @@
 #  * limitations under the License.
 from datetime import datetime
 from functools import cached_property
+from typing import Optional
 
 import numpy as np
+from pint import Quantity
 from pyvips import Image as VIPSImage
-from tifffile import xml2dict
+from tifffile import TiffFile, TiffPageSeries, xml2dict
 
-from pims import UNIT_REGISTRY
 from pims.formats import AbstractFormat
-from pims.formats.utils.dict_utils import flatten_dict
+from pims.formats.utils.abstract import CachedDataPath
+from pims.formats.utils.engines.omexml import OMEXML
 from pims.formats.utils.engines.tifffile import TifffileChecker, TifffileParser, cached_tifffile
-from pims.formats.utils.engines.vips import VipsHistogramReader, VipsReader
-from pims.formats.utils.metadata import ImageChannel, ImageMetadata
-from pims.formats.utils.omexml import OMEXML
-from pims.formats.utils.planes import PlanesInfo
-from pims.formats.utils.pyramid import Pyramid
-from pims.formats.utils.vips import dtype_to_bits
-from pims.processing.color import identify_channel_color
+from pims.formats.utils.engines.vips import VipsReader
+from pims.formats.utils.histogram import DefaultHistogramReader
+from pims.formats.utils.structures.metadata import ImageChannel, ImageMetadata, MetadataStore
+from pims.formats.utils.structures.planes import PlanesInfo
+from pims.formats.utils.structures.pyramid import Pyramid
+from pims.utils import UNIT_REGISTRY
+from pims.utils.color import infer_channel_color
+from pims.utils.dict import flatten
+from pims.utils.dtypes import dtype_to_bits
 
 
-def clean_ome_dict(d):
+def clean_ome_dict(d: dict) -> dict:
     for k, v in d.items():
         if k.endswith('Settings') or k.endswith('Ref'):
             continue
@@ -58,24 +62,24 @@ def clean_ome_dict(d):
     return d
 
 
-def parse_ome(omexml):
+def parse_ome(omexml: str) -> OMEXML:
     return OMEXML(omexml)
 
 
-def cached_omexml(format):
+def cached_omexml(format: AbstractFormat) -> OMEXML:
     tf = cached_tifffile(format)
     return format.get_cached('_omexml', parse_ome, tf.pages[0].description)
 
 
-def cached_omedict(format):
+def cached_omedict(format: AbstractFormat) -> dict:
     tf = cached_tifffile(format)
     return format.get_cached('_omedict', xml2dict, tf.pages[0].description)
 
 
-def cached_tifffile_baseseries(format):
+def cached_tifffile_baseseries(format: AbstractFormat) -> TiffPageSeries:
     tf = cached_tifffile(format)
 
-    def get_baseseries(tf):
+    def get_baseseries(tf: TiffFile) -> TiffPageSeries:
         idx = np.argmax([np.prod(s.shape) for s in tf.series])
         return tf.series[idx]
 
@@ -84,7 +88,7 @@ def cached_tifffile_baseseries(format):
 
 class OmeTiffChecker(TifffileChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         if super().match(pathlike):
             tf = cls.get_tifffile(pathlike)
             return tf.is_ome
@@ -93,10 +97,10 @@ class OmeTiffChecker(TifffileChecker):
 
 class OmeTiffParser(TifffileParser):
     @property
-    def base(self):
+    def base(self) -> TiffPageSeries:
         return cached_tifffile_baseseries(self.format)
 
-    def parse_main_metadata(self):
+    def parse_main_metadata(self) -> ImageMetadata:
         base = self.base
         shape = dict(zip(base.axes, base.shape))
 
@@ -131,18 +135,19 @@ class OmeTiffParser(TifffileParser):
             name = channel.name
             if not name and default_names is not None:
                 name = default_names[c]
-            color = identify_channel_color(channel.color, c, imd.n_channels)
+            color = infer_channel_color(channel.color, c, imd.n_channels)
             imd.set_channel(
                 ImageChannel(
                     index=c, emission_wavelength=channel.emission_wavelength,
                     excitation_wavelength=channel.excitation_wavelength,
-                    suggested_name=name, color=color
+                    suggested_name=name,
+                    color=color
                 )
             )
 
         return imd
 
-    def parse_known_metadata(self):
+    def parse_known_metadata(self) -> ImageMetadata:
         omexml = cached_omexml(self.format)
         base = omexml.main_image
 
@@ -194,7 +199,9 @@ class OmeTiffParser(TifffileParser):
         return imd
 
     @staticmethod
-    def parse_frame_rate(time_increment, unit):
+    def parse_frame_rate(
+        time_increment: Optional[float], unit: Optional[str]
+    ) -> Optional[Quantity]:
         if unit is None:
             unit = 's'
         if time_increment in [None, 0]:
@@ -202,7 +209,9 @@ class OmeTiffParser(TifffileParser):
         return 1 / time_increment * UNIT_REGISTRY(unit)
 
     @staticmethod
-    def parse_ome_physical_size(physical_size, unit):
+    def parse_ome_physical_size(
+        physical_size: Optional[float], unit: Optional[str]
+    ) -> Optional[Quantity]:
         if unit is None:
             unit = 'µm'
         if physical_size in [None, 0] or unit in ['pixel', 'reference frame']:
@@ -210,14 +219,14 @@ class OmeTiffParser(TifffileParser):
         return physical_size * UNIT_REGISTRY(unit)
 
     @staticmethod
-    def parse_ome_acquisition_date(date):
+    def parse_ome_acquisition_date(date: Optional[str]) -> Optional[datetime]:
         if date is None:
             return None
         return datetime.fromisoformat(date)
 
-    def parse_raw_metadata(self):
+    def parse_raw_metadata(self) -> MetadataStore:
         store = super().parse_raw_metadata()
-        ome = flatten_dict(clean_ome_dict(cached_omedict(self.format)))
+        ome = flatten(clean_ome_dict(cached_omedict(self.format)))
         for full_key, value in ome.items():
             key = full_key.split('.')[-1]
             if key not in ('TiffData', 'BinData'):
@@ -225,7 +234,7 @@ class OmeTiffParser(TifffileParser):
 
         return store
 
-    def parse_pyramid(self):
+    def parse_pyramid(self) -> Pyramid:
         base_series = cached_tifffile_baseseries(self.format)
 
         pyramid = Pyramid()
@@ -242,7 +251,7 @@ class OmeTiffParser(TifffileParser):
 
         return pyramid
 
-    def parse_planes(self):
+    def parse_planes(self) -> PlanesInfo:
         omexml = cached_omexml(self.format)
         base = omexml.main_image
 
@@ -269,7 +278,9 @@ class OmeTiffReader(VipsReader):
         return im.flatten() if im.hasalpha() else im
 
     def read_window(self, region, out_width, out_height, c=None, z=None, t=None):
-        tier = self.format.pyramid.most_appropriate_tier(region, (out_width, out_height))
+        tier = self.format.pyramid.most_appropriate_tier(
+            region, (out_width, out_height)
+        )
         region = region.scale_to_tier(tier)
 
         page = self.format.planes_info.get(c, z, t, 'page_index')
@@ -278,7 +289,9 @@ class OmeTiffReader(VipsReader):
         if subifd is not None:
             opts['subifd'] = subifd
         tiff_page = VIPSImage.tiffload(str(self.format.path), **opts)
-        return tiff_page.extract_area(region.left, region.top, region.width, region.height)
+        return tiff_page.extract_area(
+            region.left, region.top, region.width, region.height
+        )
 
     def read_tile(self, tile, c=None, z=None, t=None):
         tier = tile.tier
@@ -288,7 +301,9 @@ class OmeTiffReader(VipsReader):
         if subifd is not None:
             opts['subifd'] = subifd
         tiff_page = VIPSImage.tiffload(str(self.format.path), **opts)
-        return tiff_page.extract_area(tile.left, tile.top, tile.width, tile.height)
+        return tiff_page.extract_area(
+            tile.left, tile.top, tile.width, tile.height
+        )
 
 
 class OmeTiffFormat(AbstractFormat):
@@ -304,7 +319,7 @@ class OmeTiffFormat(AbstractFormat):
     checker_class = OmeTiffChecker
     parser_class = OmeTiffParser
     reader_class = OmeTiffReader
-    histogram_reader_class = VipsHistogramReader  # TODO
+    histogram_reader_class = DefaultHistogramReader
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

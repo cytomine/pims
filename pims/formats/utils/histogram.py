@@ -11,10 +11,23 @@
 #  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
+from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
+from typing import List, TYPE_CHECKING, Tuple, Union
 
+import numpy as np
+
+from pims.api.exceptions import BadRequestException
 from pims.api.utils.models import HistogramType
+
+log = logging.getLogger("pims.formats")
+
+if TYPE_CHECKING:
+    from pims.formats import AbstractFormat
+
+PlaneIndex = Union[int, List[int]]
 
 
 class HistogramReaderInterface(ABC):
@@ -24,7 +37,7 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def image_bounds(self):
+    def image_bounds(self) -> Tuple[int, int]:
         """
         Intensity bounds on the whole image (all planes merged).
 
@@ -38,18 +51,24 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def image_histogram(self):
+    def image_histogram(self, squeeze: bool = True) -> np.ndarray:
         """
         Intensity histogram on the whole image (all planes merged)
 
+        Parameters
+        ----------
+        squeeze
+
         Returns
         -------
-        histogram : array_like (shape: 2^image.bitdepth)
+        histogram : np.ndarray of shape:
+         * If `squeeze=True`: `(2**image.bitdepth,)`
+         * Otherwise: `(1, 2**image.bitdepth)`
         """
         pass
 
     @abstractmethod
-    def channels_bounds(self):
+    def channels_bounds(self) -> List[Tuple[int, int]]:
         """
         Intensity bounds for every channels
 
@@ -60,7 +79,7 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def channel_bounds(self, c):
+    def channel_bounds(self, c: int) -> Tuple[int, int]:
         """
         Intensity bounds for a channel.
 
@@ -79,23 +98,26 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def channel_histogram(self, c):
+    def channel_histogram(self, c: PlaneIndex, squeeze: bool = True) -> np.ndarray:
         """
-        Intensity histogram for a channel
+        Intensity histogram(s) for one of several channel(s)
 
         Parameters
         ----------
-        c : int
-            The image channel index
+        squeeze
+        c
+            The image channel index(es)
 
         Returns
         -------
-        histogram : array_like (shape: 2^image.bitdepth)
+        histogram : np.ndarray of shape:
+         * If `squeeze=True` and `type(c) is int`: `(2**image.bitdepth,)`
+         * Otherwise: `(len(c), 2**image.bitdepth)`
         """
         pass
 
     @abstractmethod
-    def planes_bounds(self):
+    def planes_bounds(self) -> List[Tuple[int, int]]:
         """
         Intensity bounds for every planes
 
@@ -106,7 +128,7 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def plane_bounds(self, c, z, t):
+    def plane_bounds(self, c: int, z: int, t: int) -> Tuple[int, int]:
         """
         Intensity bounds for a plane
 
@@ -129,12 +151,80 @@ class HistogramReaderInterface(ABC):
         pass
 
     @abstractmethod
-    def plane_histogram(self, c, z, t):
+    def plane_histogram(
+        self, c: PlaneIndex, z: PlaneIndex, t: PlaneIndex, squeeze=True
+    ) -> np.ndarray:
         """
-        Intensity histogram for a plane
+        Intensity histogram(s) for one or several plane(s).
 
         Returns
         -------
-        histogram : array_like (shape: 2^image.bitdepth)
+        Shape: (len(t), len(z), len(c), 2**image.bitdepth). If `squeeze` is
+        True, plane dimensions of length 1 are removed.
         """
         pass
+
+
+class AbstractHistogramReader(HistogramReaderInterface, ABC):
+    """
+    Base histogram reader. All histogram readers must extend this class.
+    """
+    def __init__(self, format: AbstractFormat):
+        self.format = format
+
+
+class DefaultHistogramReader(AbstractHistogramReader):
+    def type(self) -> HistogramType:
+        return HistogramType.FAST
+
+    def image_bounds(self) -> Tuple[int, int]:
+        log.warning(
+            f"[orange]Impossible {self.format.path} to compute "
+            f"image histogram bounds. Default values used."
+        )
+        return 0, 2 ** self.format.main_imd.significant_bits
+
+    def image_histogram(self, squeeze=True):
+        raise BadRequestException(
+            detail=f"No histogram found for {self.format.path}"
+        )
+
+    def channels_bounds(self) -> List[Tuple[int, int]]:
+        log.warning(
+            f"[orange]Impossible {self.format.path} to compute "
+            f"channels histogram bounds. Default values used."
+        )
+        return [(0, 2 ** self.format.main_imd.significant_bits)] \
+               * self.format.main_imd.n_channels
+
+    def channel_bounds(self, c: int) -> Tuple[int, int]:
+        log.warning(
+            f"[orange]Impossible {self.format.path} to compute "
+            f"channel histogram bounds. Default values used."
+        )
+        return 0, 2 ** self.format.main_imd.significant_bits
+
+    def channel_histogram(self, c, squeeze=True):
+        raise BadRequestException(
+            detail=f"No histogram found for {self.format.path}"
+        )
+
+    def planes_bounds(self) -> List[Tuple[int, int]]:
+        log.warning(
+            f"[orange]Impossible {self.format.path} to compute "
+            f"plane histogram bounds. Default values used."
+        )
+        return [(0, 2 ** self.format.main_imd.significant_bits)] \
+               * self.format.main_imd.n_planes
+
+    def plane_bounds(self, c: int, z: int, t: int) -> Tuple[int, int]:
+        log.warning(
+            f"[orange]Impossible {self.format.path} to compute "
+            f"plane histogram bounds. Default values used."
+        )
+        return 0, 2 ** self.format.main_imd.significant_bits
+
+    def plane_histogram(self, c, z, t, squeeze=True):
+        raise BadRequestException(
+            detail=f"No histogram found for {self.format.path}"
+        )

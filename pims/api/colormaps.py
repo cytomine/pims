@@ -23,9 +23,9 @@ from pims.api.utils.mimetype import (
     OutputExtension, PROCESSING_MIMETYPES,
     extension_path_parameter, get_output_format
 )
-from pims.api.utils.models import CollectionSize, ColormapId, ColormapType
+from pims.api.utils.models import CollectionSize, ColormapId
 from pims.api.utils.response import response_list
-from pims.processing.colormaps import COLORMAPS
+from pims.processing.colormaps import COLORMAPS, ColormapType
 from pims.processing.image_response import ColormapRepresentationResponse
 
 router = APIRouter()

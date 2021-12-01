@@ -16,78 +16,32 @@ from enum import Enum
 from typing import Any, List, Optional, Union
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field, conint
+from starlette.requests import Request
+from starlette.responses import Response
+
 from pims.api.exceptions import NoAppropriateRepresentationProblem, check_representation_existence
 from pims.api.utils.header import ImageRequestHeaders, add_image_size_limit_header
-from pims.api.utils.image_parameter import get_thumb_output_dimensions, safeguard_output_dimensions
 from pims.api.utils.mimetype import OutputExtension, VISUALISATION_MIMETYPES, get_output_format
 from pims.api.utils.models import (
     AssociatedName, CollectionSize, FormatId,
     ImageOutDisplayQueryParams, ZoomOrLevel
 )
+from pims.api.utils.output_parameter import (
+    get_thumb_output_dimensions,
+    safeguard_output_dimensions
+)
 from pims.api.utils.parameter import filepath_parameter, imagepath_parameter, path2filepath
 from pims.api.utils.response import convert_quantity, response_list
 from pims.cache import cache_image_response
 from pims.config import Settings, get_settings
-from pims.files.file import Path
-from pims.formats.utils.metadata import MetadataType
+from pims.files.file import FileRole, FileType, Path
+from pims.formats.utils.structures.metadata import MetadataType
 from pims.processing.image_response import AssociatedResponse
-from pydantic import BaseModel, Field, conint
-from starlette.requests import Request
-from starlette.responses import Response
 
 router = APIRouter()
 api_tags = ['Metadata']
 cache_associated_ttl = get_settings().cache_ttl_thumb
-
-
-class FileRole(Enum):
-    """
-    The role of a file. The same image data can be represented in different ways, in different
-    files, each of them serving different purposes.
-
-    * `UPLOAD` - This file is the one such as received by PIMS.
-    * `ORIGINAL` - This file is in its original format and contains (part of) metadata.
-    * `SPATIAL` - This file is used to retrieve regular 2D spatial regions from the image.
-    * `SPECTRAL` - This file is used to retrieve spectral data from the image.
-    * `NONE` - This file has no defined role for PIMS.
-    """
-
-    UPLOAD = 'UPLOAD'
-    ORIGINAL = 'ORIGINAL'
-    SPATIAL = 'SPATIAL'
-    SPECTRAL = 'SPECTRAL'
-    NONE = 'NONE'
-
-    @classmethod
-    def from_path(cls, path):
-        role = cls.NONE
-        if path.has_original_role():
-            role = cls.ORIGINAL
-        if path.has_spatial_role():
-            role = cls.SPATIAL
-        if path.has_spectral_role():
-            role = cls.SPECTRAL
-        if path.has_upload_role():
-            role = cls.UPLOAD
-        return role
-
-
-class FileType(Enum):
-    """
-    The type of the file.
-    * `SINGLE` - The file only has one image.
-    * `COLLECTION` - The file is a container and contains multiple images that need further
-    processing.
-    """
-
-    SINGLE = 'SINGLE'
-    COLLECTION = 'COLLECTION'
-
-    @classmethod
-    def from_path(cls, path):
-        if path.is_collection():
-            return cls.COLLECTION
-        return cls.SINGLE
 
 
 class SingleFileInfo(BaseModel):
@@ -151,7 +105,7 @@ class FileInfo(BaseModel):
             return SingleFileInfo(**info)
 
 
-class PixelType(Enum):
+class PixelType(str, Enum):
     """
     The type used to store each pixel in the image.
     """
@@ -504,7 +458,7 @@ class AssociatedInfo(BaseModel):
         ]
 
 
-class MetadataTypeEnum(Enum):
+class MetadataTypeEnum(str, Enum):
     """
     The metadata value type
     """
@@ -711,7 +665,7 @@ async def show_associated_image(
 
 @cache_image_response(expire=cache_associated_ttl, vary=['config', 'request', 'response'])
 def _show_associated_image(
-    request: Request, response: Response,  # required for @cache
+    request: Request, response: Response,  # required for @cache  # noqa
     path: Path,
     height, width, length,
     associated_key,
@@ -721,7 +675,7 @@ def _show_associated_image(
     in_image = path.get_spatial()
     check_representation_existence(in_image)
 
-    associated = getattr(in_image, 'associated_{}'.format(associated_key.value))
+    associated = getattr(in_image, f'associated_{associated_key.value}')
     if not associated or not associated.exists:
         raise NoAppropriateRepresentationProblem(path, associated_key)
 
@@ -762,6 +716,77 @@ def show_metadata(
 
     store = original.raw_metadata
     return response_list([Metadata.from_metadata(md) for md in store.values()])
+
+
+# ANNOTATIONS
+
+class MetadataAnnotation(BaseModel):
+    """
+    A metadata annotation is an annotation stored in an image file.
+
+    """
+    geometry: str = Field(
+        ...,
+        description='A geometry described in Well-known text (WKT)',
+        example='POINT(10 10)',
+    )
+    terms: List[str] = Field(
+        ...,
+        description='A list of terms (labels) associated to the annotation',
+        example='ROI'
+    )
+    properties: dict = Field(
+        ...,
+        description='A set of key-value pairs associated to the annotation'
+    )
+    channels: List[int] = Field(
+        ...,
+        description='Channel indexes associated to the annotation'
+    )
+    z_slices: List[int] = Field(
+        ...,
+        description='Z-slice indexes associated to the annotation'
+    )
+    timepoints: List[int] = Field(
+        ...,
+        description='Timepoint indexes associated to the annotation'
+    )
+
+    @classmethod
+    def from_metadata_annotation(cls, annot):
+        return cls(
+            **{
+                "geometry": annot.wkt,
+                "terms": annot.terms,
+                "properties": annot.properties,
+                "channels": annot.channels,
+                "z_slices": annot.z_slices,
+                "timepoints": annot.timepoints
+            }
+        )
+
+
+class MetadataAnnotationCollection(CollectionSize):
+    items: List[MetadataAnnotation]
+
+
+@router.get(
+    '/image/{filepath:path}/metadata/annotations',
+    response_model=MetadataAnnotationCollection,
+    tags=api_tags
+)
+def show_metadata_annotations(
+    path: Path = Depends(imagepath_parameter)
+):
+    """
+    Get image annotation metadata
+    """
+    original = path.get_original()
+    check_representation_existence(original)
+    return response_list(
+        [MetadataAnnotation.from_metadata_annotation(a)
+         for a in original.annotations]
+    )
 
 
 # REPRESENTATIONS

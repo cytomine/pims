@@ -122,12 +122,10 @@ def not_raises(expected_exc):
 
     except expected_exc as err:
         raise AssertionError(
-            "Did raise exception {0} when it should not!".format(
-                repr(expected_exc)
-            )
+            f"Did raise exception {repr(expected_exc)} when it should not!"
         )
 
     except Exception as err:
         raise AssertionError(
-            "An unexpected exception {0} raised.".format(repr(err))
+            f"An unexpected exception {repr(err)} raised."
         )

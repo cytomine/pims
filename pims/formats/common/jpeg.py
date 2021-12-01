@@ -13,22 +13,28 @@
 #  * limitations under the License.
 import logging
 from functools import cached_property
+from typing import Optional
 
-from pims import UNIT_REGISTRY
+from pint import Quantity
+
 from pims.formats import AbstractFormat
+from pims.formats.utils.abstract import CachedDataPath
 from pims.formats.utils.checker import SignatureChecker
 from pims.formats.utils.engines.vips import (
-    VipsHistogramReader, VipsParser, VipsReader,
+    VipsParser, VipsReader,
     VipsSpatialConvertor
 )
-from pims.formats.utils.metadata import parse_datetime, parse_float
+from pims.formats.utils.histogram import DefaultHistogramReader
+from pims.formats.utils.structures.metadata import ImageMetadata
+from pims.utils import UNIT_REGISTRY
+from pims.utils.types import parse_datetime, parse_float
 
 log = logging.getLogger("pims.formats")
 
 
 class JPEGChecker(SignatureChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         buf = cls.get_signature(pathlike)
         return (len(buf) > 2 and
                 buf[0] == 0xFF and
@@ -36,20 +42,18 @@ class JPEGChecker(SignatureChecker):
                 buf[2] == 0xFF)
 
 
-class JPEGReader(VipsReader):
-    pass
-
-
 class JPEGParser(VipsParser):
     @staticmethod
-    def parse_physical_size(physical_size, unit):
+    def parse_physical_size(
+        physical_size: Optional[int], unit: Optional[str]
+    ) -> Optional[Quantity]:
         supported_units = ("meters", "inches", "cm")
         if physical_size is not None and parse_float(physical_size) is not None \
                 and unit in supported_units:
             return parse_float(physical_size) * UNIT_REGISTRY(unit)
         return None
 
-    def parse_known_metadata(self):
+    def parse_known_metadata(self) -> ImageMetadata:
         # Tags reference: https://exiftool.org/TagNames/JPEG.html
         imd = super().parse_known_metadata()
         raw = self.format.raw_metadata
@@ -61,17 +65,21 @@ class JPEGParser(VipsParser):
         imd.acquisition_datetime = parse_datetime(raw.get_first_value(date_fields))
 
         imd.physical_size_x = self.parse_physical_size(
-            raw.get_value("EXIF.XResolution"), raw.get_value("EXIF.ResolutionUnit")
+            raw.get_value("EXIF.XResolution"),
+            raw.get_value("EXIF.ResolutionUnit")
         )
         imd.physical_size_y = self.parse_physical_size(
-            raw.get_value("EXIF.YResolution"), raw.get_value("EXIF.ResolutionUnit")
+            raw.get_value("EXIF.YResolution"),
+            raw.get_value("EXIF.ResolutionUnit")
         )
         if imd.physical_size_x is None and imd.physical_size_y is None:
             imd.physical_size_x = self.parse_physical_size(
-                raw.get_value("JFIF.XResolution"), raw.get_value("JFIF.ResolutionUnit")
+                raw.get_value("JFIF.XResolution"),
+                raw.get_value("JFIF.ResolutionUnit")
             )
             imd.physical_size_y = self.parse_physical_size(
-                raw.get_value("JFIF.YResolution"), raw.get_value("JFIF.ResolutionUnit")
+                raw.get_value("JFIF.YResolution"),
+                raw.get_value("JFIF.ResolutionUnit")
             )
         imd.is_complete = True
         return imd
@@ -88,8 +96,8 @@ class JPEGFormat(AbstractFormat):
     """
     checker_class = JPEGChecker
     parser_class = JPEGParser
-    reader_class = JPEGReader
-    histogram_reader_class = VipsHistogramReader
+    reader_class = VipsReader
+    histogram_reader_class = DefaultHistogramReader
     convertor_class = VipsSpatialConvertor
 
     def __init__(self, *args, **kwargs):
@@ -103,7 +111,7 @@ class JPEGFormat(AbstractFormat):
     @cached_property
     def need_conversion(self):
         imd = self.main_imd
-        return not (imd.width < 1024 and imd.height < 1024)
+        return imd.width > 1024 or imd.height > 1024
 
     @property
     def media_type(self):

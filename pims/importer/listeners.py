@@ -15,18 +15,27 @@
 import logging
 from copy import copy
 from enum import Enum
+from typing import Dict, Iterator, Optional, Tuple, Union
 
 from cytomine.models import (
-    AbstractImage, AbstractSlice, AbstractSliceCollection, ImageInstance, Property,
+    AbstractImage, AbstractSlice, AbstractSliceCollection, ImageInstance, ProjectCollection,
+    Property,
     PropertyCollection, UploadedFile
 )
 from cytomine.models.collection import CollectionPartialUploadException
+
 from pims.api.utils.response import convert_quantity
 from pims.config import get_settings
 from pims.files.file import Path
-from pims.formats.utils.metadata import parse_int
-from pims.formats.utils.vips import dtype_to_bits
+from pims.files.image import Image
+from pims.formats import AbstractFormat
+from pims.utils.dtypes import dtype_to_bits
+from pims.utils.types import parse_int
 
+PENDING_PATH = Path(get_settings().pending_path)
+FILE_ROOT_PATH = Path(get_settings().root)
+
+# TODO: move to Cytomine Python client.
 UploadedFile.CHECKING_INTEGRITY = 60
 UploadedFile.ERROR_INTEGRITY = 61
 UploadedFile.UNPACKING = 50
@@ -35,9 +44,6 @@ UploadedFile.UNPACKED = 106
 UploadedFile.ERROR_STORAGE = UploadedFile.ERROR_DEPLOYMENT
 UploadedFile.ERROR_UNEXPECTED = UploadedFile.ERROR_DEPLOYMENT
 UploadedFile.IMPORTED = UploadedFile.CONVERTED
-
-PENDING_PATH = Path(get_settings().pending_path)
-FILE_ROOT_PATH = Path(get_settings().root)
 
 
 class ImportEventType(str, Enum):
@@ -80,90 +86,94 @@ class ImportListener:
     def __repr__(self):
         return self.__class__.__name__
 
-    def start_data_extraction(self, path, *args, **kwargs):
+    def start_data_extraction(self, path: Path, *args, **kwargs):
         pass
 
-    def moved_pending_file(self, old_path, new_path, *args, **kwargs):
+    def moved_pending_file(self, old_path: Path, new_path: Path, *args, **kwargs):
         pass
 
-    def end_data_extraction(self, path, *args, **kwargs):
+    def end_data_extraction(self, path: Path, *args, **kwargs):
         pass
 
-    def start_format_detection(self, path, *args, **kwargs):
+    def start_format_detection(self, path: Path, *args, **kwargs):
         pass
 
-    def end_format_detection(self, path, format, *args, **kwargs):
+    def end_format_detection(self, path: Path, format: AbstractFormat, *args, **kwargs):
         pass
 
-    def error_no_format(self, path, *args, **kwargs):
+    def error_no_format(self, path: Path, *args, **kwargs):
         pass
 
-    def start_unpacking(self, path, *args, **kwargs):
+    def start_unpacking(self, path: Path, *args, **kwargs):
         pass
 
     def end_unpacking(
-        self, path, unpacked_path, *args,
-        format=None, is_collection=False, **kwargs
+        self, path: Path, unpacked_path: Path, *args,
+        format: AbstractFormat = None, is_collection: bool = False, **kwargs
     ):
         pass
 
-    def error_unpacking(self, path, *args, **kwargs):
+    def error_unpacking(self, path: Path, *args, **kwargs):
         pass
 
-    def register_file(self, path, parent_path, *args, **kwargs):
+    def register_file(self, path: Path, parent_path: Path, *args, **kwargs):
         pass
 
-    def start_integrity_check(self, path, *args, **kwargs):
+    def start_integrity_check(self, path: Path, *args, **kwargs):
         pass
 
-    def end_integrity_check(self, path, *args, **kwargs):
+    def end_integrity_check(self, path: Path, *args, **kwargs):
         pass
 
-    def error_integrity(self, path, *args, **kwargs):
+    def error_integrity(self, path: Path, *args, **kwargs):
         pass
 
-    def start_conversion(self, path, parent_path, *args, **kwargs):
+    def start_conversion(self, path: Path, parent_path: Path, *args, **kwargs):
         pass
 
-    def end_conversion(self, path, *args, **kwargs):
+    def end_conversion(self, path: Path, *args, **kwargs):
         pass
 
-    def error_conversion(self, path, *args, **kwargs):
+    def error_conversion(self, path: Path, *args, **kwargs):
         pass
 
-    def start_spatial_deploy(self, path, *args, **kwargs):
+    def start_spatial_deploy(self, path: Path, *args, **kwargs):
         pass
 
-    def end_spatial_deploy(self, spatial_path, *args, **kwargs):
+    def end_spatial_deploy(self, spatial_path: Path, *args, **kwargs):
         pass
 
-    def start_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def start_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         pass
 
-    def end_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def end_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         pass
 
-    def error_histogram(self, hist_path, image, *args, **kwargs):
+    def error_histogram(self, hist_path: Path, image: Image, *args, **kwargs):
         pass
 
-    def end_successful_import(self, path, image, *args, **kwargs):
+    def end_successful_import(self, path: Path, image: Image, *args, **kwargs):
         pass
 
-    def file_not_found(self, path, *args, **kwargs):
+    def file_not_found(self, path: Path, *args, **kwargs):
         pass
 
-    def file_not_moved(self, path, *args, **kwargs):
+    def file_not_moved(self, path: Path, *args, **kwargs):
         pass
 
-    def generic_file_error(self, path, *args, **kwargs):
+    def generic_file_error(self, path: Path, *args, **kwargs):
         pass
 
 
 class CytomineListener(ImportListener):
-    def __init__(self, auth, uf, root=None, existing_mapping=None, projects=None,
-                 user_properties=None):
+    def __init__(
+        self, auth: Tuple[str, str, str], uf: UploadedFile,
+        root: Optional[UploadedFile] = None,
+        existing_mapping: Optional[Dict[str, UploadedFile]] = None,
+        projects: Optional[ProjectCollection] = None,
+        user_properties: Optional[Iterator[Tuple[str, str]]] = None
+    ):
         """
-
         Parameters
         ----------
         uf : UploadedFile
@@ -202,20 +212,20 @@ class CytomineListener(ImportListener):
         self.user_properties = user_properties
         self.images = []
 
-    def new_listener_from_registered_child(self, child):
+    def new_listener_from_registered_child(self, child: Path):
         uf = self.get_uf(str(child))
         return CytomineListener(
             self.auth, uf, existing_mapping=self.path_uf_mapping,
             projects=self.projects, user_properties=self.user_properties
         )
 
-    def _find_uf_by_id(self, id):
+    def _find_uf_by_id(self, id: int) -> UploadedFile:
         return next(
             (uf for uf in self.path_uf_mapping.values() if uf.id == id),
             UploadedFile().fetch(id)
         )
 
-    def get_uf(self, path):
+    def get_uf(self, path: Union[str, Path]) -> UploadedFile:
         uf = self.path_uf_mapping.get(str(path))
         if not uf:
             path = path.resolve()
@@ -226,13 +236,13 @@ class CytomineListener(ImportListener):
         return uf
 
     @staticmethod
-    def _corresponding_error_status(status):
+    def _corresponding_error_status(status: int) -> int:
         if status < 100:
             return status + 1
         else:
             return UploadedFile.ERROR_UNEXPECTED
 
-    def propagate_error(self, uf):
+    def propagate_error(self, uf: UploadedFile):
         # Shouldn't be a core responsibility ?
         if uf.parent:
             parent = self._find_uf_by_id(uf.parent)
@@ -240,44 +250,44 @@ class CytomineListener(ImportListener):
             parent.update()
             self.propagate_error(parent)
 
-    def start_data_extraction(self, path, *args, **kwargs):
+    def start_data_extraction(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.EXTRACTING_DATA
         uf.update()
 
-    def moved_pending_file(self, old_path, new_path, *args, **kwargs):
+    def moved_pending_file(self, old_path: Path, new_path: Path, *args, **kwargs):
         uf = self.get_uf(old_path)
         uf.filename = str(new_path.relative_to(FILE_ROOT_PATH))
         uf.update()
         self.path_uf_mapping[str(new_path)] = uf
 
-    def end_data_extraction(self, path, *args, **kwargs):
+    def end_data_extraction(self, path: Path, *args, **kwargs):
         pass
 
-    def start_format_detection(self, path, *args, **kwargs):
+    def start_format_detection(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.DETECTING_FORMAT
         uf.update()
 
-    def end_format_detection(self, path, format, *args, **kwargs):
+    def end_format_detection(self, path: Path, format: AbstractFormat, *args, **kwargs):
         uf = self.get_uf(path)
         uf.contentType = format.get_identifier()  # TODO: not the content type
         uf.update()
 
-    def error_no_format(self, path, *args, **kwargs):
+    def error_no_format(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.ERROR_FORMAT
         uf.update()
         self.propagate_error(uf)
 
-    def start_unpacking(self, path, *args, **kwargs):
+    def start_unpacking(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.UNPACKING
         uf.update()
 
     def end_unpacking(
-        self, path, unpacked_path, *args,
-        format=None, is_collection=False, **kwargs
+        self, path: Path, unpacked_path: Path, *args,
+        format: AbstractFormat = None, is_collection: bool = False, **kwargs
     ):
         parent = self.get_uf(path)
         parent.status = UploadedFile.UNPACKED
@@ -289,7 +299,7 @@ class CytomineListener(ImportListener):
             uf.contentType = format.get_identifier()  # TODO
             uf.size = unpacked_path.size
             uf.filename = str(unpacked_path.relative_to(FILE_ROOT_PATH))
-            uf.originalFilename = str(format.main_path.name)
+            uf.originalFilename = str(format.path.name)
             uf.ext = ""
             uf.storage = parent.storage
             uf.user = parent.user
@@ -298,7 +308,7 @@ class CytomineListener(ImportListener):
             uf.save()
             self.path_uf_mapping[str(unpacked_path)] = uf
 
-    def register_file(self, path, parent_path, *args, **kwargs):
+    def register_file(self, path: Path, parent_path: Path, *args, **kwargs):
         parent = self.get_uf(parent_path)
 
         uf = UploadedFile()
@@ -315,27 +325,27 @@ class CytomineListener(ImportListener):
         uf.save()
         self.path_uf_mapping[str(path)] = uf
 
-    def error_unpacking(self, path, *args, **kwargs):
+    def error_unpacking(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.ERROR_UNPACKING
         uf.update()
         self.propagate_error(uf)
 
-    def start_integrity_check(self, path, *args, **kwargs):
+    def start_integrity_check(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.CHECKING_INTEGRITY
         uf.update()
 
-    def end_integrity_check(self, path, *args, **kwargs):
+    def end_integrity_check(self, path: Path, *args, **kwargs):
         pass
 
-    def error_integrity(self, path, *args, **kwargs):
+    def error_integrity(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.ERROR_INTEGRITY
         uf.update()
         self.propagate_error(uf)
 
-    def start_conversion(self, path, parent_path, *args, **kwargs):
+    def start_conversion(self, path: Path, parent_path: Path, *args, **kwargs):
         uf = UploadedFile()
         uf.status = UploadedFile.CONVERTING
         uf.originalFilename = path.name
@@ -355,22 +365,22 @@ class CytomineListener(ImportListener):
         parent.status = UploadedFile.CONVERTING
         parent.update()
 
-    def end_conversion(self, path, *args, **kwargs):
+    def end_conversion(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.size = path.size
         # uf.status = UploadedFile.CONVERTED
         uf.update()
 
-    def error_conversion(self, path, *args, **kwargs):
+    def error_conversion(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = UploadedFile.ERROR_CONVERSION
         uf.update()
         self.propagate_error(uf)
 
-    def start_spatial_deploy(self, path, *args, **kwargs):
+    def start_spatial_deploy(self, path: Path, *args, **kwargs):
         pass
 
-    def end_spatial_deploy(self, spatial_path, *args, **kwargs):
+    def end_spatial_deploy(self, spatial_path: Path, *args, **kwargs):
         if not spatial_path.is_symlink():
             # The spatial path is not a symbolic link
             # -> a conversion has been performed
@@ -378,16 +388,16 @@ class CytomineListener(ImportListener):
             uf.status = UploadedFile.IMPORTED
             uf.update()
 
-    def start_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def start_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         pass  # TODO ?
 
-    def end_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def end_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         pass  # TODO ?
 
-    def error_histogram(self, hist_path, image, *args, **kwargs):
+    def error_histogram(self, hist_path: Path, image: Image, *args, **kwargs):
         pass  # TODO ?
 
-    def end_successful_import(self, path, image, *args, **kwargs):
+    def end_successful_import(self, path: Path, image: Image, *args, **kwargs):
         uf = self.get_uf(path)
 
         ai = AbstractImage()
@@ -398,6 +408,7 @@ class CytomineListener(ImportListener):
         ai.depth = image.depth
         ai.duration = image.duration
         ai.channels = image.n_intrinsic_channels
+        ai.extrinsicChannels = image.n_channels
         if image.physical_size_x:
             ai.physicalSizeX = round(
                 convert_quantity(image.physical_size_x, "micrometers"), 6
@@ -413,7 +424,7 @@ class CytomineListener(ImportListener):
         ai.fps = image.frame_rate
         ai.magnification = parse_int(image.objective.nominal_magnification)
         ai.bitPerSample = dtype_to_bits(image.pixel_type)
-        ai.samplePerPixel = image.n_channels
+        ai.samplePerPixel = image.n_channels / image.n_intrinsic_channels
         ai.save()
         self.abstract_images.append(ai)
 
@@ -421,15 +432,17 @@ class CytomineListener(ImportListener):
         set_channel_names = image.n_intrinsic_channels == image.n_channels
         for c in range(image.n_intrinsic_channels):
             name = None
+            color = None
             if set_channel_names:
                 name = image.channels[c].suggested_name
+                color = image.channels[c].hex_color
             for z in range(image.depth):
                 for t in range(image.duration):
                     mime = "image/pyrtiff"  # TODO: remove
                     asc.append(
                         AbstractSlice(
                             ai.id, uf.id, mime, c, z, t,
-                            channelName=name
+                            channelName=name, channelColor=color
                         )
                     )
         asc.save()
@@ -462,19 +475,19 @@ class CytomineListener(ImportListener):
             instances.append(ImageInstance(ai.id, p.id).save())
         self.images.append((ai, instances))
 
-    def file_not_moved(self, path, *args, **kwargs):
+    def file_not_moved(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = self._corresponding_error_status(uf.status)
         uf.update()
         self.propagate_error(uf)
 
-    def file_not_found(self, path, *args, **kwargs):
+    def file_not_found(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         uf.status = self._corresponding_error_status(uf.status)
         uf.update()
         self.propagate_error(uf)
 
-    def generic_file_error(self, path, *args, **kwargs):
+    def generic_file_error(self, path: Path, *args, **kwargs):
         uf = self.get_uf(path)
         if uf.status % 2 == 0:
             # Only update error status if the status is not yet an error
@@ -485,33 +498,33 @@ class CytomineListener(ImportListener):
 
 
 class StdoutListener(ImportListener):
-    def __init__(self, name):
-        self.log = logging.getLogger("upload.{}".format(name))
+    def __init__(self, name: str):
+        self.log = logging.getLogger(f"upload.{name}")
 
-    def start_data_extraction(self, path, *args, **kwargs):
+    def start_data_extraction(self, path: Path, *args, **kwargs):
         self.log.info(f"Start import and data extraction for {path}")
 
-    def moved_pending_file(self, old_path, new_path, *args, **kwargs):
+    def moved_pending_file(self, old_path: Path, new_path: Path, *args, **kwargs):
         self.log.info(f"Moved {old_path} to {new_path}")
 
-    def end_data_extraction(self, path, *args, **kwargs):
+    def end_data_extraction(self, path: Path, *args, **kwargs):
         self.log.info(f"Finished to extract data for {path}")
 
-    def start_format_detection(self, path, *args, **kwargs):
+    def start_format_detection(self, path: Path, *args, **kwargs):
         self.log.info(f"Start format detection for {path}")
 
-    def end_format_detection(self, path, format, *args, **kwargs):
+    def end_format_detection(self, path: Path, format: AbstractFormat, *args, **kwargs):
         self.log.info(f"Identified format {format.get_name()} for {path}")
 
-    def error_no_format(self, path, *args, **kwargs):
+    def error_no_format(self, path: Path, *args, **kwargs):
         self.log.warning(f"No matching format for {path}")
 
-    def start_unpacking(self, path, *args, **kwargs):
+    def start_unpacking(self, path: Path, *args, **kwargs):
         self.log.info(f"Start unpacking archive {path}")
 
     def end_unpacking(
-        self, path, unpacked_path, *args,
-        format=None, is_collection=False, **kwargs
+        self, path: Path, unpacked_path: Path, *args,
+        format: AbstractFormat = None, is_collection: bool = False, **kwargs
     ):
         self.log.info(
             f"The archive {path} is unpacked in directory "
@@ -525,69 +538,69 @@ class StdoutListener(ImportListener):
                 f"for {unpacked_path} "
             )
 
-    def error_unpacking(self, path, *args, **kwargs):
+    def error_unpacking(self, path: Path, *args, **kwargs):
         self.log.error(
             f"Error while unpacking archive {path} "
             f"({str(kwargs.get('exception', ''))})"
         )
 
-    def register_file(self, path, parent_path, *args, **kwargs):
+    def register_file(self, path: Path, parent_path: Path, *args, **kwargs):
         self.log.info(f"Found {path} in {parent_path}")
 
-    def start_integrity_check(self, path, *args, **kwargs):
+    def start_integrity_check(self, path: Path, *args, **kwargs):
         self.log.info(f"Start integrity check for {path}")
 
-    def end_integrity_check(self, path, *args, **kwargs):
+    def end_integrity_check(self, path: Path, *args, **kwargs):
         self.log.info(f"{path} passed integrity check")
 
-    def error_integrity(self, path, *args, **kwargs):
+    def error_integrity(self, path: Path, *args, **kwargs):
         self.log.error(f"Integrity error for {path}.")
         for integrity_error in kwargs.get('integrity_errors', []):
             attr, e = integrity_error
             self.log.error(f"- {attr}: {e}")
 
-    def start_conversion(self, path, parent_path, *args, **kwargs):
+    def start_conversion(self, path: Path, parent_path: Path, *args, **kwargs):
         self.log.info(f"Start converting {parent_path} to {path}")
 
-    def end_conversion(self, path, *args, **kwargs):
+    def end_conversion(self, path: Path, *args, **kwargs):
         self.log.info(f"Finished {path} conversion !")
 
-    def error_conversion(self, path, *args, **kwargs):
+    def error_conversion(self, path: Path, *args, **kwargs):
         self.log.error(f"Error while converting {path}", exc_info=True)
 
-    def start_spatial_deploy(self, path, *args, **kwargs):
+    def start_spatial_deploy(self, path: Path, *args, **kwargs):
         self.log.info(f"--- SPATIAL representation deployment for {path} ---")
 
-    def end_spatial_deploy(self, spatial_path, *args, **kwargs):
+    def end_spatial_deploy(self, spatial_path: Path, *args, **kwargs):
         self.log.info(
             f"Finished to deploy spatial representation "
             f"at {spatial_path}"
         )
 
-    def start_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def start_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         self.log.info(f"--- HISTOGRAM representation deployment for {image} ---")
 
-    def end_histogram_deploy(self, hist_path, image, *args, **kwargs):
+    def end_histogram_deploy(self, hist_path: Path, image: Image, *args, **kwargs):
         self.log.info(
             f"Finished to deploy histogram representation "
             f"at {hist_path}"
         )
 
-    def error_histogram(self, hist_path, image, *args, **kwargs):
+    def error_histogram(self, hist_path: Path, image: Image, *args, **kwargs):
         self.log.error(
             f"Failed to build histogram at {hist_path} "
             f"for image {image} "
             f"({kwargs.get('exception')}", exc_info=True
         )
 
-    def end_successful_import(self, path, image, *args, **kwargs):
+    def end_successful_import(self, path: Path, image: Image, *args, **kwargs):
         self.log.info(f"{path} imported !")
 
-    def file_not_found(self, path, *args, **kwargs):
+    def file_not_found(self, path: Path, *args, **kwargs):
         self.log.error(f"File {path} is not found", exc_info=True)
 
-    def file_not_moved(self, path, *args, **kwargs):
+    def file_not_moved(self, path: Path, *args, **kwargs):
         self.log.error(f"Failed to move {path}", exc_info=True)
 
-    def generic_file_error(self, path, *args, **kwargs):
+    def generic_file_error(self, path: Path, *args, **kwargs):
         self.log.error(f"Generic file error for {path}", exc_info=True)

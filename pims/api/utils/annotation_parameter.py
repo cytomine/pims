@@ -11,6 +11,7 @@
 #  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
+from typing import Dict, Iterable, List, Optional
 
 from shapely.affinity import affine_transform
 from shapely.errors import WKTReadingError
@@ -18,31 +19,34 @@ from shapely.validation import explain_validity, make_valid
 from shapely.wkt import loads as wkt_loads
 
 from pims.api.exceptions import InvalidGeometryException
+from pims.api.utils.header import AnnotationOrigin
 from pims.processing.annotations import ParsedAnnotation, ParsedAnnotations
-from pims.processing.region import Region
+from pims.utils.color import Color
 
 
 def parse_annotations(
-    annotations, ignore_fields=None, default=None,
-    point_envelope_length=None, origin='LEFT_TOP', im_height=None
-):
+    annotations: Iterable[Dict], ignore_fields: Optional[List[str]] = None,
+    default: Optional[Dict] = None, point_envelope_length: Optional[float] = None,
+    origin: AnnotationOrigin = AnnotationOrigin.LEFT_TOP, im_height: Optional[int] = None
+) -> ParsedAnnotations:
     """
     Parse a list of annotations.
 
     Parameters
     ----------
-    annotations : list of dict
+    annotations
         List of annotations, as defined in API spec.
-    ignore_fields : list of str or None
+    ignore_fields
         List of field names to ignore for parsing.
-    default : dict (optional)
+    default
         Default value for fields. Default value for missing fields is None.
-    point_envelope_length : int (optional)
+    point_envelope_length
         Envelope length for Point geometries.
-    origin : str (`LEFT_TOP` or `LEFT_BOTTOM`)
+    origin
         The origin of coordinate system in which annotations are described
-    im_height : int (optional)
+    im_height
         The image height for coordinate system transformation
+        Mandatory if `origin` is `LEFT_BOTTOM`.
 
     Returns
     -------
@@ -64,33 +68,35 @@ def parse_annotations(
 
 
 def parse_annotation(
-    geometry, fill_color=None, stroke_color=None,
-    stroke_width=None, ignore_fields=None, default=None,
-    point_envelope_length=1.0, origin='LEFT_TOP', im_height=None
-):
+    geometry: str, fill_color: Optional[Color] = None, stroke_color: Optional[Color] = None,
+    stroke_width: Optional[int] = None, ignore_fields: Optional[List[str]] = None,
+    default: Optional[Dict] = None, point_envelope_length: float = 1.0,
+    origin: AnnotationOrigin = AnnotationOrigin.LEFT_TOP, im_height: Optional[int] = None
+) -> ParsedAnnotation:
     """
     Parse an annotation.
 
     Parameters
     ----------
-    geometry : str
+    geometry
         WKT string to parse (parsed geometry can be invalid)
-    fill_color : pydantic.Color (optional)
+    fill_color
         Fill color to parse
-    stroke_color : pydantic.Color (optional)
+    stroke_color
         Stroke color to parse
-    stroke_width : int (optional)
+    stroke_width
         Stroke width to parse
-    ignore_fields : list of str (optional)
+    ignore_fields
         List of field names to ignore for parsing.
-    default : dict (optional)
+    default
         Default value for fields. Default value for missing fields is None.
-    point_envelope_length : int (optional)
+    point_envelope_length
         Envelope length for Point geometries.
-    origin : str (`LEFT_TOP` or `LEFT_BOTTOM`)
+    origin
         The origin of coordinate system in which annotations are described
-    im_height : int (optional)
+    im_height
         The image height for coordinate system transformation
+        Mandatory if `origin` is `LEFT_BOTTOM`.
 
     Returns
     -------
@@ -143,58 +149,23 @@ def parse_annotation(
     return ParsedAnnotation(**parsed)
 
 
-def get_annotation_region(in_image, annots, context_factor=1.0, try_square=False):
+def is_wkt(value: str) -> bool:
     """
-    Get the region describing the rectangular envelope of all
-    annotations multiplied by an optional context factor.
+    Whether a value is a Well-Known Text string.
+    The underlying geometry validity is not checked.
 
     Parameters
     ----------
-    in_image : Image
-        Image in which region is extracted.
-    annots : ParsedAnnotations
-        List of parsed annotations
-    context_factor : float
-        Context factor
-    try_square : bool
-        Try to adapt region's width or height to have a square region.
+    value : str
+        Value expected to be a WKT string.
+
     Returns
     -------
-    Region
+    bool
+        Whether the value is a WKT string or not
     """
-
-    # All computation are done in non normalized float.
-    minx, miny, maxx, maxy = annots.bounds
-    left = minx
-    top = miny
-    width = maxx - minx
-    height = maxy - miny
-    if context_factor and context_factor != 1.0:
-        left -= width * (context_factor - 1) / 2.0
-        top -= height * (context_factor - 1) / 2.0
-        width *= context_factor
-        height *= context_factor
-
-    if try_square:
-        if width < height:
-            delta = height - width
-            left -= delta / 2
-            width += delta
-        elif height < width:
-            delta = width - height
-            top -= delta / 2
-            height += delta
-
-    width = min(width, in_image.width)
-    if left < 0:
-        left = 0
-    else:
-        left = min(left, in_image.width - width)
-
-    height = min(height, in_image.height)
-    if top < 0:
-        top = 0
-    else:
-        top = min(top, in_image.height - height)
-
-    return Region(top, left, width, height)
+    try:
+        wkt_loads(str(value))
+        return True
+    except WKTReadingError:
+        return False

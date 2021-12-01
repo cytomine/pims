@@ -39,6 +39,9 @@ class ReadableSettings(BaseSettings):
     task_queue_enabled: bool = True
     task_queue_url: str = "rabbitmq:5672"
 
+    max_pixels_complete_histogram: int = 1024 * 1024
+    max_length_complete_histogram: int = 1024
+
     class Config:
         extra = Extra.ignore
 

@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 from fastapi import Query
 from pydantic import BaseModel, Field, confloat, conint
 
-from pims.processing.color import Color
+from pims.utils.color import Color
 
 
 class BaseDependency:
@@ -180,25 +180,6 @@ class ExistingColormapId(BaseModel):
     __root__: str = Field(
         ..., examples=['JET', '!#f00', 'red']
     )
-
-
-class ColormapType(str, Enum):
-    """
-    * `SEQUENTIAL` - change in lightness and often saturation of color
-    incrementally, often using a single hue should be used for representing
-    information that has ordering.
-    * `DIVERGING` - change in lightness and possibly saturation of two different
-    colors that meet in the middle at an unsaturated color; should be used when
-    the image has a critical middle value.
-    * `QUALITATIVE` - often are miscellaneous colors; should be used to
-    represent information which does not have ordering or relationships
-    """
-    PERCEPTUAL_UNIFORM = "PERCEPTUAL_UNIFORM"
-    SEQUENTIAL = "SEQUENTIAL"
-    DIVERGING = "DIVERGING"
-    QUALITATIVE = "QUALITATIVE"
-    CYCLIC = "CYCLIC"
-    MISCELLANEOUS = "MISCELLANEOUS"
 
 
 class ImageIn(BaseModel):
@@ -676,7 +657,7 @@ class TileRequest(ImageInDisplay):
                 TargetLevelTileIndex, TargetLevelTileCoordinates]
 
 
-class ChannelReduction(Enum):
+class ChannelReduction(str, Enum):
     """
     Reduction function used to merge selected channels.
     """
@@ -687,7 +668,7 @@ class ChannelReduction(Enum):
     MAX = 'MAX'
 
 
-class GenericReduction(Enum):
+class GenericReduction(str, Enum):
     MIN = 'MIN'
     AVG = 'AVG'
     MAX = 'MAX'

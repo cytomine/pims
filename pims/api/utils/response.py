@@ -12,6 +12,7 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import logging
+from typing import Optional
 
 from cytomine.models import Model
 from pint import Quantity
@@ -28,17 +29,17 @@ def response_list(list_):
     }
 
 
-def convert_quantity(quantity, unit, ndigits=6):
+def convert_quantity(quantity: Optional[Quantity], unit: str, ndigits: int = 6) -> Optional[float]:
     """
     Convert a quantity to the unit required by API specification.
 
     Parameters
     ----------
-    quantity : Quantity or None or any
+    quantity
         Quantity to convert
-    unit : str
+    unit
         Pint understandable unit
-    ndigits : int
+    ndigits
         Number of digits to keep for rounding
 
     Returns
@@ -52,7 +53,7 @@ def convert_quantity(quantity, unit, ndigits=6):
         return round(quantity.to(unit).magnitude, ndigits)
 
     log.warning(
-        'The quantity {} is not of type Quantity and is thus not converted.'.format(quantity)
+        f'The quantity {quantity} is not of type Quantity and is thus not converted.'
     )
     return round(quantity, ndigits)
 

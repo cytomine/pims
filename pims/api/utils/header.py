@@ -22,7 +22,7 @@ DEFAULT_SAFE_MODE = get_settings().default_image_size_safety_mode
 DEFAULT_ANNOTATION_ORIGIN = get_settings().default_annotation_origin
 
 
-def serialize_header(value, style='simple', explode=False):
+def serialize_header(value, style='simple', explode=False):  # noqa
     """
     Serialize a header according to https://swagger.io/docs/specification/serialization/.
 
@@ -49,26 +49,29 @@ def serialize_header(value, style='simple', explode=False):
         return str(value)
 
 
-def add_image_size_limit_header(headers, request_width, request_height, safe_width, safe_height):
+def add_image_size_limit_header(
+    headers: dict, request_width: int, request_height: int, safe_width: int,
+    safe_height: int
+) -> dict:
     """
     Add X-Image-Size-Limit header to existing header dict if necessary.
 
     Parameters
     ----------
-    headers : dict
+    headers
         Dict of headers to modify in place
-    request_width : int
+    request_width
         Width requested by the user
-    request_height : int
+    request_height
         Height requested by the user
-    safe_width : int
+    safe_width
         Safe width for this request
-    safe_height : int
+    safe_height
         Safe height for this request
 
     Returns
     -------
-    headers : dict
+    headers
         The header dict possibly updated with X-Image-Size-Limit
     """
     ratio = safe_width / request_width

@@ -43,22 +43,22 @@ REQUIRED = [
     'pathvalidate>=2.4.1',
     'importlib_metadata>=4.7.1',
     'aiofiles>=0.7.0',
-    'fastapi-cache2[redis]>=0.1.6',
+    'fastapi-cache2[redis]==0.1.6',
     'aioredis>=2.0.0',
     'celery>=5.0.0',
 
     'Pint>=0.17',
-    'palettable>=3.3.0',
-
     'numpy>=1.20.1',
     'Pillow>=8.0.0',
     'pyvips>=2.1.14',
-    'tifffile>=2021.4.8',
+    'tifffile>=2021.4.8,<=2021.6.6',  # Check that no breaking changes are introduced to upgrade
     'imagecodecs>=2021.3.31',
     'scikit-image>=0.18',
     'zarr>=2.8.3',
+    'pydicom>=2.2.2',
+    'python-gdcm>=3.0.10',
 
-    'Shapely>=1.8a1',
+    'Shapely>=1.8.0',
     'rasterio>=1.2.1',
 
     # Must be at end to work with dependency links
@@ -163,8 +163,8 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: CPython',
-        'Programming Language :: Python :: Implementation :: PyPy'
     ],
     # $ setup.py publish support.
     cmdclass={

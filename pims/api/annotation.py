@@ -17,28 +17,29 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from pims.api.exceptions import check_representation_existence
-from pims.api.utils.annotation_parameter import get_annotation_region, parse_annotations
+from pims.api.utils.annotation_parameter import parse_annotations
 from pims.api.utils.header import ImageAnnotationRequestHeaders, add_image_size_limit_header
-from pims.api.utils.image_parameter import (
-    check_level_validity, check_zoom_validity, ensure_list,
-    get_window_output_dimensions, safeguard_output_dimensions
-)
 from pims.api.utils.mimetype import (
     OutputExtension, PROCESSING_MIMETYPES,
     extension_path_parameter, get_output_format
 )
 from pims.api.utils.models import (
     AnnotationCropRequest, AnnotationDrawingRequest,
-    AnnotationMaskRequest, AnnotationStyleMode, Colorspace
+    AnnotationMaskRequest, AnnotationStyleMode, ChannelReduction, Colorspace
+)
+from pims.api.utils.output_parameter import (
+    check_level_validity, check_zoom_validity, get_window_output_dimensions,
+    safeguard_output_dimensions
 )
 from pims.api.utils.parameter import imagepath_parameter
 from pims.api.window import _show_window
 from pims.cache import cache_image_response
 from pims.config import Settings, get_settings
 from pims.files.file import Path
-from pims.processing.annotations import annotation_crop_affine_matrix
-from pims.processing.color import WHITE
+from pims.processing.annotations import annotation_crop_affine_matrix, get_annotation_region
 from pims.processing.image_response import MaskResponse
+from pims.utils.color import WHITE
+from pims.utils.iterables import ensure_list
 
 router = APIRouter()
 api_tags = ['Annotations']
@@ -83,7 +84,7 @@ async def show_mask(
     supported_mimetypes=PROCESSING_MIMETYPES
 )
 def _show_mask(
-    request: Request, response: Response,  # required for @cache
+    request: Request, response: Response,  # required for @cache  # noqa
     path: Path,
     annotations,
     context_factor,
@@ -164,7 +165,7 @@ async def _show_crop(
     min_intensities, max_intensities, filters, gammas,
     bits, colorspace,
     extension, headers, config,
-    colormaps=None, c_reduction="ADD", z_reduction=None, t_reduction=None,
+    colormaps=None, c_reduction=ChannelReduction.ADD, z_reduction=None, t_reduction=None,
 ):
     in_image = path.get_spatial()
     check_representation_existence(in_image)
@@ -224,7 +225,7 @@ async def show_drawing(
 
 
 async def _show_drawing(
-    request: Request, response: Response,  # required for @cache
+    request: Request, response: Response,  # required for @cache  # noqa
     path: Path,
     annotations,
     context_factor,
@@ -233,7 +234,7 @@ async def _show_drawing(
     channels, z_slices, timepoints,
     min_intensities, max_intensities, filters, gammas, log,
     extension, headers, config,
-    colormaps=None, c_reduction="ADD", z_reduction=None, t_reduction=None,
+    colormaps=None, c_reduction=ChannelReduction.ADD, z_reduction=None, t_reduction=None,
 ):
     in_image = path.get_spatial()
     check_representation_existence(in_image)

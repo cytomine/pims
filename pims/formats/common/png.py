@@ -13,22 +13,28 @@
 #  * limitations under the License.
 import logging
 from functools import cached_property
+from typing import Optional
 
-from pims import UNIT_REGISTRY
+from pint import Quantity
+
 from pims.formats import AbstractFormat
+from pims.formats.utils.abstract import CachedDataPath
 from pims.formats.utils.checker import SignatureChecker
 from pims.formats.utils.engines.vips import (
-    VipsHistogramReader, VipsParser, VipsReader,
+    VipsParser, VipsReader,
     VipsSpatialConvertor
 )
-from pims.formats.utils.metadata import parse_datetime, parse_float
+from pims.formats.utils.histogram import DefaultHistogramReader
+from pims.formats.utils.structures.metadata import ImageMetadata
+from pims.utils import UNIT_REGISTRY
+from pims.utils.types import parse_datetime, parse_float
 
 log = logging.getLogger("pims.formats")
 
 
 class PNGChecker(SignatureChecker):
     @classmethod
-    def match(cls, pathlike):
+    def match(cls, pathlike: CachedDataPath) -> bool:
         buf = cls.get_signature(pathlike)
         return (len(buf) > 3 and
                 buf[0] == 0x89 and
@@ -38,7 +44,7 @@ class PNGChecker(SignatureChecker):
 
 
 class PNGParser(VipsParser):
-    def parse_main_metadata(self):
+    def parse_main_metadata(self) -> ImageMetadata:
         imd = super().parse_main_metadata()
 
         # Do not count alpha channel if any
@@ -47,7 +53,7 @@ class PNGParser(VipsParser):
             imd.n_channels_per_read = imd.n_channels
         return imd
 
-    def parse_known_metadata(self):
+    def parse_known_metadata(self) -> ImageMetadata:
         imd = super().parse_known_metadata()
         raw = self.format.raw_metadata
 
@@ -79,7 +85,9 @@ class PNGParser(VipsParser):
         return imd
 
     @staticmethod
-    def parse_physical_size(physical_size, unit, inverse):
+    def parse_physical_size(
+        physical_size: Optional[str], unit: Optional[str], inverse: bool
+    ) -> Optional[Quantity]:
         supported_units = {1: "meter", 2: "inch"}
         if type(unit) == str:
             supported_units = {"meters": "meter", "inches": "inch"}
@@ -90,10 +98,6 @@ class PNGParser(VipsParser):
                 physical_size = 1 / physical_size
             return physical_size * UNIT_REGISTRY(supported_units[unit])
         return None
-
-
-class PNGReader(VipsReader):
-    pass
 
 
 class PNGFormat(AbstractFormat):
@@ -109,8 +113,8 @@ class PNGFormat(AbstractFormat):
 
     checker_class = PNGChecker
     parser_class = PNGParser
-    reader_class = PNGReader
-    histogram_reader_class = VipsHistogramReader
+    reader_class = VipsReader
+    histogram_reader_class = DefaultHistogramReader
     convertor_class = VipsSpatialConvertor
 
     def __init__(self, *args, **kwargs):
@@ -124,7 +128,7 @@ class PNGFormat(AbstractFormat):
     @cached_property
     def need_conversion(self):
         imd = self.main_imd
-        return not (imd.width < 1024 and imd.height < 1024)
+        return imd.width > 1024 or imd.height > 1024
 
     @property
     def media_type(self):

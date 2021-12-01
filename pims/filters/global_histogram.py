@@ -20,8 +20,8 @@ from pyvips import Image as VIPSImage
 from skimage.filters import threshold_isodata, threshold_minimum, threshold_otsu, threshold_yen
 
 from pims.api.utils.models import Colorspace, FilterType
-from pims.files.histogram import clamp_histogram
 from pims.filters import AbstractFilter
+from pims.processing.histograms.utils import clamp_histogram
 
 
 class AbstractGlobalFilter(AbstractFilter, ABC):

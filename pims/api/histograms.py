@@ -19,15 +19,16 @@ from pydantic import BaseModel, Field, conint
 from starlette import status
 
 from pims.api.exceptions import BadRequestException, check_representation_existence
-from pims.api.utils.image_parameter import (
-    ensure_list, get_channel_indexes, get_timepoint_indexes,
+from pims.api.utils.input_parameter import (
+    get_channel_indexes, get_timepoint_indexes,
     get_zslice_indexes
 )
 from pims.api.utils.models import CollectionSize, HistogramType
 from pims.api.utils.parameter import imagepath_parameter
 from pims.api.utils.response import response_list
 from pims.files.file import HISTOGRAM_STEM, Path
-from pims.files.histogram import argmax_nonzero, argmin_nonzero, build_histogram_file
+from pims.processing.histograms.utils import argmax_nonzero, argmin_nonzero, build_histogram_file
+from pims.utils.iterables import ensure_list
 
 router = APIRouter()
 api_tags = ['Histograms']

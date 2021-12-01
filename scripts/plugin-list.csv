@@ -1,3 +1,3 @@
 enabled,name,git_url,git_branch
-1,pims-plugin-format-openslide,https://github.com/Cytomine-ULiege/pims-plugin-format-openslide.git,0a20982d3b608c5420ed8ad814752202df9f50c7
-0,pims-plugin-format-bioformats,https://github.com/Cytomine-ULiege/pims-plugin-format-bioformats.git,
+1,pims-plugin-format-openslide,https://github.com/Cytomine-ULiege/pims-plugin-format-openslide.git,931c9e5b37eb9a5cbacbc60d6398700d5bc5d759
+1,pims-plugin-format-bioformats,https://github.com/Cytomine-ULiege/pims-plugin-format-bioformats.git,651059cdc7f6265fcc2aa993591d6a0760ae1bdc

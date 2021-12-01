@@ -31,15 +31,16 @@ from pims.api.utils.cytomine_auth import (
     get_this_image_server, parse_authorization_header,
     parse_request_token, sign_token
 )
-from pims.api.utils.image_parameter import ensure_list
 from pims.api.utils.parameter import imagepath_parameter, sanitize_filename
 from pims.api.utils.response import serialize_cytomine_model
 from pims.config import Settings, get_settings
 from pims.files.archive import make_zip_archive
-from pims.files.file import Path, unique_name_generator
+from pims.files.file import Path
 from pims.importer.importer import run_import
 from pims.importer.listeners import CytomineListener
 from pims.tasks.queue import Task, send_task
+from pims.utils.iterables import ensure_list
+from pims.utils.strings import unique_name_generator
 
 router = APIRouter()
 
@@ -91,7 +92,7 @@ async def legacy_import(
             raise AuthenticationException("PIMS authentication to Cytomine failed.")
 
         this = get_this_image_server(config.pims_url)
-        cyto_keys = c.get("userkey/{}/keys.json".format(public_key))
+        cyto_keys = c.get(f"userkey/{public_key}/keys.json")
         private_key = cyto_keys["privateKey"]
 
         if sign_token(private_key, parse_request_token(request)) != signature:
@@ -101,13 +102,13 @@ async def legacy_import(
         user = c.current_user
         storage = Storage().fetch(id_storage)
         if not storage:
-            raise CytomineProblem("Storage {} not found".format(id_storage))
+            raise CytomineProblem(f"Storage {id_storage} not found")
 
         projects = ProjectCollection()
         for pid in id_projects:
             project = Project().fetch(pid)
             if not project:
-                raise CytomineProblem("Project {} not found".format(pid))
+                raise CytomineProblem(f"Project {pid} not found")
             projects.append(project)
 
         keys = keys.split(',') if keys is not None else []

@@ -13,40 +13,91 @@
 #  * limitations under the License.
 
 from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from matplotlib.cm import get_cmap
 from pydantic.color import COLORS_BY_NAME
 
-from pims.api.utils.models import ColormapType
-from pims.formats.utils.vips import np_dtype
-from pims.processing.color import Color
+from pims.utils.color import Color
+from pims.utils.dtypes import np_dtype
+
+LookUpTable = np.ndarray  # Shape: (LUT size, LUT n_components)
+StackedLookUpTables = np.ndarray  # Shape: (N, LUT size, LUT n_components)
+
+
+class ColormapType(str, Enum):
+    """
+    * `SEQUENTIAL` - change in lightness and often saturation of color
+    incrementally, often using a single hue should be used for representing
+    information that has ordering.
+    * `DIVERGING` - change in lightness and possibly saturation of two different
+    colors that meet in the middle at an unsaturated color; should be used when
+    the image has a critical middle value.
+    * `QUALITATIVE` - often are miscellaneous colors; should be used to
+    represent information which does not have ordering or relationships
+    """
+    PERCEPTUAL_UNIFORM = "PERCEPTUAL_UNIFORM"
+    SEQUENTIAL = "SEQUENTIAL"
+    DIVERGING = "DIVERGING"
+    QUALITATIVE = "QUALITATIVE"
+    CYCLIC = "CYCLIC"
+    MISCELLANEOUS = "MISCELLANEOUS"
 
 
 class Colormap(ABC):
-    def __init__(self, id, ctype, inverted=False):
+    def __init__(self, id: str, cmap_type: ColormapType, inverted: bool = False):
         self.id = id
-        self.ctype = ctype
+        self.ctype = cmap_type
         self.inverted = inverted
 
     @property
-    def identifier(self):
-        inv = "!" if self.inverted else ""
-        return inv + self.id.upper()
+    def identifier(self) -> str:
+        inverted = "!" if self.inverted else ""
+        return inverted + self.id.upper()
 
     @property
-    def name(self):
-        inv = " (Inverted)" if self.inverted else ""
-        return self.id.replace('_', ' ').title() + inv
+    def name(self) -> str:
+        inverted = " (Inverted)" if self.inverted else ""
+        return self.id.replace('_', ' ').title() + inverted
 
     @abstractmethod
-    def lut(self, size=256, bitdepth=8):
+    def lut(
+        self, size: int = 256, bitdepth: int = 8,
+        n_components: Optional[int] = None
+    ) -> LookUpTable:
+        """
+        Build a look-up table (LUT) for the colormap.
+
+        Parameters
+        ----------
+        size
+            LUT size (i.e. maximum admissible pixel intensity in the image
+            where the look-up table will be applied).
+        bitdepth
+            LUT bitdepth (i.e. expected image bitdepth after applying LUT).
+        n_components
+            LUT number of components. Expected to be 1 (grayscale) or 3 (rgb).
+            If not set, the number of components defined for the colormap is
+            used.
+
+        Returns
+        -------
+        lut
+            the look-up table of shape (size, n_components)
+        """
         pass
 
-    def n_components(self):
+    def n_components(self) -> int:
+        """
+        Number of color components in the colormap.
+        1 for grayscale, 3 for rgb.
+        """
         return 3
 
-    def as_image(self, width, height, bitdepth=8):
+    def as_image(self, width: int, height: int, bitdepth: int = 8) -> np.ndarray:
+        """Get an image representation of the colormap."""
         lut = self.lut(size=width, bitdepth=bitdepth)
         return np.tile(lut, (height, 1, 1))
 
@@ -56,41 +107,51 @@ class Colormap(ABC):
 
 
 class MatplotlibColormap(Colormap):
-    def __init__(self, id, ctype, inverted=False):
-        super().__init__(id, ctype, inverted)
+    def __init__(self, id: str, cmap_type: ColormapType, inverted: bool = False):
+        super().__init__(id, cmap_type, inverted)
 
         self._mpl_cmap = dict()
         self._init_cmap(256)
 
-    def _init_cmap(self, size):
+    def _init_cmap(self, size: int):
         # (Matplotlib already precomputes with N=256)
         mpl_size = size if size != 256 else None
         mpl_name = self.id + ("_r" if self.inverted else "")
         self._mpl_cmap[size] = get_cmap(mpl_name, mpl_size)
-        self._mpl_cmap[size]._init()
+        self._mpl_cmap[size]._init()  # noqa
 
-    def lut(self, size=256, bitdepth=8):
+    def lut(
+        self, size: int = 256, bitdepth: int = 8,
+        n_components: Optional[int] = None
+    ) -> LookUpTable:
+        if n_components is None or n_components > 3:
+            n_components = self.n_components()
+
         if size not in self._mpl_cmap:
             self._init_cmap(size)
 
-        lut = self._mpl_cmap[size]._lut[:size, :3] * (2 ** bitdepth - 1)
+        lut = self._mpl_cmap[size]._lut[:size, :n_components]  # noqa
+        lut *= (2 ** bitdepth - 1)
         return lut.astype(np_dtype(bitdepth))
 
 
 class ColorColormap(Colormap):
-    def __init__(self, color, inverted=False):
+    def __init__(self, color: Color, inverted: bool = False):
         super().__init__(str(color), ColormapType.SEQUENTIAL, inverted)
         self._color = color
 
     @property
-    def color(self):
+    def color(self) -> Color:
         return self._color
 
-    def n_components(self):
+    def n_components(self) -> int:
         r, g, b = self._color.as_float_tuple(alpha=False)
         return 1 if r == g == b else 3
 
-    def lut(self, size=256, bitdepth=8, n_components=None):
+    def lut(
+        self, size: int = 256, bitdepth: int = 8,
+        n_components: Optional[int] = None
+    ) -> LookUpTable:
         components = self._color.as_float_tuple(alpha=False)
         if n_components is None or n_components > 3:
             n_components = self.n_components()
@@ -110,17 +171,70 @@ class ColorColormap(Colormap):
         return lut.astype(np_dtype(bitdepth))
 
 
-def combine_lut(lut_a, lut_b):
-    if lut_a.ndim == 1:
-        lut_a = lut_a[:, np.newaxis]
+def default_lut(
+    size: int = 256, bitdepth: int = 8, n_components: int = 1
+) -> LookUpTable:
+    """Default LUT"""
+    return np.stack(
+        (np.arange(size),) * n_components, axis=-1
+    ).astype(np_dtype(bitdepth))
+
+
+def combine_lut(lut_a: LookUpTable, lut_b: LookUpTable) -> LookUpTable:
+    """
+    Combine 2 LUTs in a single LUT. Applying combined LUT from LUTs A & B on
+    an image produces the same result than applying successively LUT A on an
+    image, and then LUT B on the result.
+
+    `lut_a` and `lut_b` must have same size.
+    """
     return np.take_along_axis(lut_b, lut_a, axis=0)
 
 
-def default_lut(size=256, bitdepth=8, n_components=1):
-    return np.arange(size).reshape((size, n_components)).astype(np_dtype(bitdepth))
+def combine_stacked_lut(
+    lut_a: StackedLookUpTables, lut_b: StackedLookUpTables
+) -> StackedLookUpTables:
+    """
+    Combine 2 stacked LUTs in a single stacked LUT.
+    Applying combined LUT from LUTs A & B on an image produces the same result
+    than applying successively LUT A on an image, and then LUT B on the result.
+
+    `lut_a` and `lut_b` must have same size and same number of elements in the
+    stack.
+    """
+    return np.take_along_axis(lut_b, lut_a, axis=1)
+
+
+def get_lut_from_stacked(
+    stack: Optional[StackedLookUpTables], index: int = 0, as_stack: bool = False
+) -> Union[None, LookUpTable, StackedLookUpTables]:
+    """
+    Get a LUT from a stack of LUTs.
+
+    Parameters
+    ----------
+    stack
+        The stack of LUTs. If not set, None is returned.
+    index
+        The index of the desired LUT in the stack
+    as_stack
+        Whether to return the LUT as a stack of length 1 or not.
+
+    Returns
+    -------
+    None if `stack` is None or a LUT if `as_stack` is False or a LUT stack
+    if `as_stack` is True.
+    """
+    if stack is None:
+        return None
+    lut = stack[index, :, :]
+    if as_stack:
+        lut = lut[np.newaxis, :, :]
+    return lut
 
 
 mpl_cmaps = dict()
+
 mpl_cmaps[ColormapType.PERCEPTUAL_UNIFORM] = [
     'viridis', 'plasma', 'inferno', 'magma', 'cividis']
 mpl_cmaps[ColormapType.SEQUENTIAL] = [
@@ -145,13 +259,15 @@ mpl_cmaps[ColormapType.MISCELLANEOUS] = [
     'gist_rainbow', 'rainbow', 'jet', 'turbo', 'nipy_spectral',
     'gist_ncar']
 
+ColormapsByName = Dict[str, Colormap]
+
 # Non-trivial colormaps
 COLORMAPS = {}
 
 for ctype, cmaps in mpl_cmaps.items():
     for cmap in cmaps:
         for inv in (False, True):
-            colormap = MatplotlibColormap(cmap, ctype=ctype, inverted=inv)
+            colormap = MatplotlibColormap(cmap, cmap_type=ctype, inverted=inv)
             COLORMAPS[colormap.identifier] = colormap
 
 # Pre-load colormaps for named colors
@@ -180,5 +296,6 @@ RGB_COLORMAPS = [
 ]
 
 
-def is_rgb_colormapping(colormaps):
+def is_rgb_colormapping(colormaps: List[Colormap]) -> bool:
+    """Check that given colormaps correspond to a RGB colormapping."""
     return len(colormaps) == 3 and colormaps == RGB_COLORMAPS
