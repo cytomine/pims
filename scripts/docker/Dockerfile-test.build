@@ -1,0 +1,8 @@
+ARG  VERSION_NUMBER
+FROM cytomine/pims-dependencies:v$VERSION_NUMBER
+
+COPY . /app
+
+WORKDIR /app
+
+CMD pytest /app/tests --junit-xml=ci/test-reports/pytest_unit.xml
