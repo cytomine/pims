@@ -52,13 +52,17 @@ def _discover_format_plugins() -> List[Union[str, EntryPoint]]:
         name for _, name, _ in iter_modules(__path__, prefix="pims.formats.")
         if name not in NON_PLUGINS_MODULES
     ]
+    print(f"plugins with prefix 'pims.formats': {plugins}")
     plugins += [
         name for _, name, _ in iter_modules()
         if name.startswith(FORMAT_PLUGIN_PREFIX)
     ]
+    print(f"plugins with prefix 'pims.formats' and 'pims_format_': {plugins}")
     plugins += entry_points(group=PLUGIN_GROUP)
-
+    print(f"all plugins (with entrypoints): {plugins}")
     plugin_names = [p.module if type(p) is EntryPoint else p for p in plugins]
+    print(f"plugins names: {plugin_names}")
+    print(f"number of plugins: {len(plugins)}")
     logger.info(
         f"[green bold]Format plugins: found {len(plugins)} plugin(s)[/] "
         f"[yellow]({', '.join(plugin_names)})"
