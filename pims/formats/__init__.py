@@ -63,7 +63,7 @@ def _discover_format_plugins() -> List[Union[str, EntryPoint]]:
     for plugin in plugins:
         print(type(plugin))
         
-    plugin_names = [p.module if type(p) is EntryPoint else p for p in plugins]
+    plugin_names = [p.module if type(p) is setuptools._vendor.importlib_metadata.EntryPoint else p for p in plugins]
     print(f"plugins names: {plugin_names}")
     print(f"number of plugins: {len(plugins)}")
     print(plugins[0], plugins[1])
