@@ -63,6 +63,8 @@ def _discover_format_plugins() -> List[Union[str, EntryPoint]]:
     plugin_names = [p.module if type(p) is EntryPoint else p for p in plugins]
     print(f"plugins names: {plugin_names}")
     print(f"number of plugins: {len(plugins)}")
+    print(plugins[0], plugins[1])
+    print(type(plugins[0]), type(plugins[1]))
     logger.info(
         f"[green bold]Format plugins: found {len(plugins)} plugin(s)[/] "
         f"[yellow]({', '.join(plugin_names)})"
