@@ -18,7 +18,7 @@ from inspect import isabstract, isclass
 from pkgutil import iter_modules
 from types import ModuleType
 from typing import Dict, List, Type, Union
-
+import setuptools
 from importlib_metadata import EntryPoint, entry_points  # noqa
 
 from pims.formats.utils.abstract import AbstractFormat
