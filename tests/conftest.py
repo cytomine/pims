@@ -124,6 +124,12 @@ def image_path_excentric_filename():
 	path = f"{test_root()}/upload_test_excentric"
 	return path, filename
 	
+@pytest.fixture
+def image_path_excentric_filename1():
+	filename = "test 2.zip"
+	path = f"{test_root()}/upload_test_excentric1"
+	return path, filename
+	
 @contextmanager
 def not_raises(expected_exc):
     try:
