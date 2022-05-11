@@ -28,7 +28,7 @@ node {
         sh 'scripts/ciCodeCoverage.sh'
     }
     stage 'Publish code coverage measurements'
-    step([$class: 'JUnitResultArchiver', testResults: '**/ci/code-coverage-reports/htmlcov/*'])
+    step([$class: 'JUnitResultArchiver', testResults: '**/ci/code-coverage-reports/coverage.xml'])
 
     stage 'Build docker image'
     withCredentials(
