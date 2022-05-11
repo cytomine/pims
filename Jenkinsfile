@@ -22,6 +22,13 @@ node {
     }
     stage 'Publish tests'
     step([$class: 'JUnitResultArchiver', testResults: '**/ci/test-reports/*.xml'])
+    
+    stage 'Run code coverage measurement'
+    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+        sh 'scripts/ciCodeCoverage.sh'
+    }
+    stage 'Publish code coverage measurements'
+    step([$class: 'JUnitResultArchiver', testResults: '**/ci/code-coverage-reports/htmlcov/*'])
 
     stage 'Build docker image'
     withCredentials(

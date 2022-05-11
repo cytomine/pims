@@ -13,4 +13,6 @@ mkdir ./ci
 
 ./scripts/ciTest.sh
 
+./scripts/ciCodeCoverage.sh
+
 ./scripts/ciBuildDockerImage.sh

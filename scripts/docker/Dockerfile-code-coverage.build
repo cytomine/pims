@@ -1,0 +1,14 @@
+ARG  VERSION_NUMBER
+FROM cytomine/pims-dependencies:v$VERSION_NUMBER
+
+COPY . /app
+
+WORKDIR /app
+RUN pip3 install /app
+
+RUN pip3 install coverage
+
+WORKDIR /app/tests
+
+CMD coverage run --omit=/usr/* -m pytest ; coverage html ; rm -rf app/ci/code-coverage-reports/htmlcov ; mv /app/tests/htmlcov /app/ci/code-coverage-reports
+
