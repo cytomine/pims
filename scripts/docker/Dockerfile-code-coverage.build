@@ -8,5 +8,5 @@ RUN pip3 install /app
 
 RUN pip3 install coverage
 
-CMD coverage run --omit=/usr/* --source=/app -m pytest ; coverage xml ; rm -f app/ci/code-coverage-reports/coverage.xml ; mv /app/tests/coverage.xml /app/ci/code-coverage-reports
+CMD coverage run --omit=/usr/* --source=/app -m pytest ; coverage xml ; rm -f /app/ci/code-coverage-reports/coverage.xml ; mv /app/coverage.xml /app/ci/code-coverage-reports
 
