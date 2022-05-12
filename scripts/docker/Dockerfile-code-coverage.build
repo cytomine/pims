@@ -10,5 +10,5 @@ RUN pip3 install coverage
 
 WORKDIR /app/tests
 
-CMD coverage run --omit=/usr/* -m pytest ; coverage xml ; rm -f app/ci/code-coverage-reports/coverage.xml ; mv /app/tests/coverage.xml /app/ci/code-coverage-reports
+CMD coverage run --omit=/usr/* --source=/app -m pytest ; coverage html ; rm -rf app/ci/code-coverage-reports/htmlcov ; mv /app/tests/htmlcov /app/ci/code-coverage-reports/htmlcov
 
