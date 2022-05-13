@@ -131,7 +131,7 @@ async def legacy_import(
         if sync:
             try:
                 run_import(
-                    upload_path, upload_name,
+                    upload_path, upload_name, id_storage,
                     extra_listeners=[cytomine], prefer_copy=False
                 )
                 root = cytomine.initial_uf.fetch()

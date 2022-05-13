@@ -78,6 +78,9 @@ class FileImporter:
     upload_dir: Optional[Path]
     processed_dir: Optional[Path]
     extracted_dir: Optional[Path]
+    
+    # If specified, upload directories are embedded in the "id_storage" directory
+    id_storage: Optional[Path]
 
     # Path to upload file (in `upload_dir`)
     upload_path: Optional[Path]
@@ -96,7 +99,7 @@ class FileImporter:
 
     def __init__(
         self, pending_file: Path, pending_name: Optional[str] = None,
-        listeners: Optional[List[ImportListener]] = None
+        id_storage: Optional[int] = None, listeners: Optional[List[ImportListener]] = None
     ):
         """
         Parameters
@@ -106,13 +109,17 @@ class FileImporter:
         pending_name
             A name to use for the pending file.
             If not provided, the current pending file name is used.
+        id_storage
+            Upload directory has parent directory "id_storage"
         listeners
             A list of import listeners
         """
         self.listeners = listeners if listeners is not None else []
         self.pending_file = pending_file
         self.pending_name = pending_name
-
+        self.id_storage = id_storage
+        
+        self.storage_dir = None
         self.upload_dir = None
         self.upload_path = None
         self.original_path = None
@@ -164,7 +171,14 @@ class FileImporter:
                 f"{UPLOAD_DIR_PREFIX}"
                 f"{str(unique_name_generator())}"
             )
-            self.upload_dir = FILE_ROOT_PATH / upload_dir_name
+            if self.id_storage:
+                self.storage_dir = FILE_ROOT_PATH / Path(str(self.id_storage))
+                if not self.storage_dir.exists(): 
+                    self.mkdir(self.storage_dir)
+                self.upload_dir = self.storage_dir / upload_dir_name
+            else:
+                self.upload_dir = FILE_ROOT_PATH / upload_dir_name
+            
             self.mkdir(self.upload_dir)
 
             if self.pending_name:
@@ -491,7 +505,8 @@ class FileImporter:
 
 
 def run_import(
-    filepath: str, name: str, extra_listeners: Optional[List[ImportListener]] = None,
+    filepath: str, name: str, id_storage: Optional[int] = None,
+    extra_listeners: Optional[List[ImportListener]] = None,
     prefer_copy: bool = False
 ):
     pending_file = Path(filepath)
@@ -503,5 +518,5 @@ def run_import(
         extra_listeners = []
 
     listeners = [StdoutListener(name)] + extra_listeners
-    fi = FileImporter(pending_file, name, listeners)
+    fi = FileImporter(pending_file, name, id_storage, listeners)
     fi.run(prefer_copy)
