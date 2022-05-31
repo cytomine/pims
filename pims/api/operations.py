@@ -161,7 +161,7 @@ async def legacy_import(
         else:
             send_task(
                 Task.IMPORT_WITH_CYTOMINE,
-                args=[cytomine_auth, upload_path, upload_name, cytomine, False],
+                args=[cytomine_auth, upload_path, upload_name, id_storage, cytomine, False],
                 starlette_background=background
             )
             return JSONResponse(

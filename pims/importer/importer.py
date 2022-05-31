@@ -80,8 +80,9 @@ class FileImporter:
     extracted_dir: Optional[Path]
     
     # If specified, upload directories are embedded in the "id_storage" directory
-    id_storage: Optional[Path]
-
+    id_storage: Optional[int]
+    storage_dir: Optional[Path]
+    
     # Path to upload file (in `upload_dir`)
     upload_path: Optional[Path]
 
@@ -178,7 +179,7 @@ class FileImporter:
                 self.upload_dir = self.storage_dir / upload_dir_name
             else:
                 self.upload_dir = FILE_ROOT_PATH / upload_dir_name
-            
+
             self.mkdir(self.upload_dir)
 
             if self.pending_name:
