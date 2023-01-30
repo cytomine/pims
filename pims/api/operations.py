@@ -222,7 +222,7 @@ def export_upload(
     return FileResponse(
         upload_file,
         media_type=media_type,
-        filename=path.name
+        filename=upload_file.name
     )
 
 
