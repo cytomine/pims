@@ -62,14 +62,10 @@ REQUIRED = [
 
     'Shapely>=1.8.0',
     'rasterio>=1.2.1',
-
-    # Must be at end to work with dependency links
-    'Cytomine-python-client>=2.3.0',
+    'cytomine-python-client>=2.3.0',
 ]
 
-DEPENDENCY_LINKS = [
-    'https://github.com/cytomine/Cytomine-python-client/tarball/master#egg=Cytomine-python-client-2.3.0'
-]
+DEPENDENCY_LINKS = [ ]
 
 # What packages are optional?
 EXTRAS = {
