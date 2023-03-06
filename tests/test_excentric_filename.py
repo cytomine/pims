@@ -25,7 +25,7 @@ def get_image(path, filename, root):
 
     if not os.path.exists(root):
         os.mkdir(root)
-	 
+     
     if not os.path.exists(f"/tmp/images/{filename}"):
         try:
             url = f"https://data.cytomine.coop/open/tests/Test%20special%20char%20%25(_!.tiff"
@@ -57,12 +57,12 @@ def get_image(path, filename, root):
         print(os.path.exists(path)) #n'existe pas
         print(os.path.exists(root)) # existe
         os.symlink(upload_dir, path)
-			
+            
 def test_exists(image_path_excentric_filename, root):
     path, filename = image_path_excentric_filename
     get_image(path, filename, root)
     assert os.path.exists(os.path.join(path, filename)) == True
-	
+    
 def test_info(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     response = client.get(f'/image/upload_test_excentric/{filename}/info')
@@ -71,30 +71,30 @@ def test_info(client, image_path_excentric_filename):
     
     assert response.json()['image']['width'] == 46000
     assert response.json()['image']['height'] == 32914
-	
+    
 def test_norm_tile(client, image_path_excentric_filename):
     path, filename = image_path_excentric_filename
     response = client.get(f"/image/upload_test_excentric/{filename}/normalized-tile/zoom/1/ti/0", headers={"accept": "image/jpeg"})
     assert response.status_code == 200
-	
+    
     img_response = Image.open(io.BytesIO(response.content))
     width_resp, height_resp = img_response.size
 
     assert width_resp == 256
     assert height_resp == 256
-	
+    
 def test_thumb(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     thumb_test(client, filename, "excentric")
-		
+        
 def test_resized(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     resized_test(client, filename, "excentric")
-	    
+        
 def test_mask(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     mask_test(client, filename, "excentric")
-	
+    
 def test_crop(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     crop_test(client, filename, "excentric")
@@ -103,7 +103,7 @@ def test_crop(client, image_path_excentric_filename):
 def test_crop_null_annot(client, image_path_excentric_filename):
     _, filename = image_path_excentric_filename
     crop_null_annot_test(client, filename, "excentric")
-	
+    
 def test_histogram_perimage(client, image_path_excentric_filename):
-	_, filename = image_path_excentric_filename
-	histogram_perimage_test(client, filename, "excentric")
+    _, filename = image_path_excentric_filename
+    histogram_perimage_test(client, filename, "excentric")
