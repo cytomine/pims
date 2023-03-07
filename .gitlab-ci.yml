@@ -115,6 +115,8 @@ publish-docker-image:
   needs:
     - job: build-docker-image-for-publish
       artifacts: false  # artifact are in docker cache (is it a safe assumption in a multi-runner env ?)
+    - job: build-python-package
+      artifacts: true  # dotenv file for $CANONICAL_VERSION_NUMBER
     - job: run-pytest
       artifacts: false
   rules:
@@ -134,10 +136,10 @@ publish-docker-image:
       fi
     - echo "Target > registry:$TARGET_CI_REGISTRY user:$TARGET_CI_REGISTRY_USER"
     - docker login -u $TARGET_CI_REGISTRY_USER -p $TARGET_CI_REGISTRY_PASSWORD $TARGET_CI_REGISTRY
-    - export DOCKER_IMAGE_NAME_FULL=$DOCKER_IMAGE_NAME:$CM_VERSION
+    - export DOCKER_IMAGE_NAME_FULL=$DOCKER_IMAGE_NAME:$CANONICAL_VERSION_NUMBER
     - docker tag $DOCKER_IMAGE_NAME_TMP_BUILD $DOCKER_IMAGE_NAME_FULL
     - docker push $DOCKER_IMAGE_NAME_FULL
-    - docker rmi $DOCKER_IMAGE_NAME_FULL
+    - docker rmi $DOCKER_IMAGE_NAME_FULL  # clean up
 
 publish-python-package:
   image: python:$PYTHON_VERSION-slim-bullseye
