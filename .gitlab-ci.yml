@@ -137,7 +137,6 @@ publish-docker-image:
     - export DOCKER_IMAGE_NAME_FULL=$DOCKER_IMAGE_NAME:$CM_VERSION
     - docker tag $DOCKER_IMAGE_NAME_TMP_BUILD $DOCKER_IMAGE_NAME_FULL
     - docker push $DOCKER_IMAGE_NAME_FULL
-  after_script:
     - docker rmi $DOCKER_IMAGE_NAME_FULL
 
 publish-python-package:
