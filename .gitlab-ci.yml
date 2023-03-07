@@ -3,6 +3,7 @@ stages:
   - test
   - build
   - publish
+  - clean
 
 # variable to register in project:
 # - DOCKERHUB_URL: url of dockerhub (e.g. docker.io)
@@ -87,9 +88,6 @@ run-pytest:
   script:
     - pip install pytest
     - pytest ./tests --junit-xml=ci/test-reports/pytest_unit.xml
-  after_script:
-    # cleaning up images
-    - docker rmi $DOCKER_IMAGE_NAME_FOR_TESTS
   artifacts:
     reports:
       junit: ci/test-reports/pytest_unit.xml
@@ -139,9 +137,6 @@ publish-docker-image:
     - export DOCKER_IMAGE_NAME_FULL=$DOCKER_IMAGE_NAME:$CM_VERSION
     - docker tag $DOCKER_IMAGE_NAME_TMP_BUILD $DOCKER_IMAGE_NAME_FULL
     - docker push $DOCKER_IMAGE_NAME_FULL
-  after_script:
-    # cleaning up images
-    - docker rmi $DOCKER_IMAGE_NAME_FULL $DOCKER_IMAGE_NAME_TMP_BUILD
 
 publish-python-package:
   image: python:$PYTHON_VERSION-slim-bullseye
@@ -166,3 +161,20 @@ publish-python-package:
         export TWINE_PASSWORD=$CI_JOB_TOKEN
       fi
     - twine upload dist/pims-*.tar.gz --repository-url $TARGET_PYTHON_REPO
+
+# cleaning temporary docker images
+clean-docker-images:
+  stage: clean
+  image: docker:latest
+  rules:
+    - when: always
+  needs:
+    - job: publish-docker-image
+      artifacts: false
+    - job: run-pytest
+      artifacts: false
+  script:
+    # '|| true' so that job proceeds even if an image does not exist
+    - docker rmi $DOCKER_IMAGE_NAME_FULL || true
+    - docker rmi $DOCKER_IMAGE_NAME_TMP_BUILD || true
+    - docker rmi $DOCKER_IMAGE_NAME_FOR_TESTS || true
