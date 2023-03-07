@@ -57,7 +57,7 @@ build-python-package:
     - |
       if [ ! -f "$DIST_FILENAME" ]; then
         echo "could not build the package, $DIST_FILENAME seems to be missing"
-        exit(-1)
+        exit -1
       fi
     - VERSION=$(python -c 'import re; import sys; m = re.match(r"^dist/pims-(.+)\.tar\.gz$", sys.argv[1].strip()); print(m.group(1))' $DIST_FILENAME) 
     - echo "CANONICAL_VERSION_NUMBER=$VERSION" > .env
