@@ -171,6 +171,7 @@ clean-docker-images:
   needs:
     - job: publish-docker-image
       artifacts: false
+      optional: true
     - job: run-pytest
       artifacts: false
   script:
