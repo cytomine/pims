@@ -79,7 +79,8 @@ run-pytest:
   stage: test
   image: 
     name: $DOCKER_IMAGE_NAME_FOR_TESTS
-    entrypoint: ["/bin/bash"]
+    entrypoint: ["/bin/bash", "-l", "-c"]
+    pull_policy: never
   needs:
     - job: build-docker-image-for-tests
       artifacts: false
