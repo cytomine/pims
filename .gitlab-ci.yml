@@ -137,6 +137,8 @@ publish-docker-image:
     - export DOCKER_IMAGE_NAME_FULL=$DOCKER_IMAGE_NAME:$CM_VERSION
     - docker tag $DOCKER_IMAGE_NAME_TMP_BUILD $DOCKER_IMAGE_NAME_FULL
     - docker push $DOCKER_IMAGE_NAME_FULL
+  after_script:
+    - docker rmi $DOCKER_IMAGE_NAME_FULL
 
 publish-python-package:
   image: python:$PYTHON_VERSION-slim-bullseye
@@ -176,6 +178,5 @@ clean-docker-images:
       artifacts: false
   script:
     # '|| true' so that job proceeds even if an image does not exist
-    - docker rmi $DOCKER_IMAGE_NAME_FULL || true
     - docker rmi $DOCKER_IMAGE_NAME_TMP_BUILD || true
     - docker rmi $DOCKER_IMAGE_NAME_FOR_TESTS || true
