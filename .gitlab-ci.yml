@@ -87,9 +87,12 @@ run-pytest:
   script:
     - pip install pytest
     - pytest ./tests --junit-xml=ci/test-reports/pytest_unit.xml
+  after_script:
+    # cleaning up images
+    - docker rmi $DOCKER_IMAGE_NAME_FOR_TESTS
   artifacts:
     reports:
-      junit: ci/tests-reports/pytest_unit.xml
+      junit: ci/test-reports/pytest_unit.xml
 
 # need to set the pims version number right in the container files
 # mostly cached
