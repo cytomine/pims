@@ -23,6 +23,38 @@ RUN cd /usr/local/src/openjpeg-${OPENJPEG_VERSION} && \
     ldconfig
 
 # --------------------------------------------------------------- #
+FROM debian:bullseye-slim AS vips-builder
+
+RUN apt-get update && apt-get install -y build-essential wget \
+        pkg-config \
+        glib2.0-dev \
+        libexpat1-dev \
+        libtiff5-dev \
+        libjpeg-dev \
+        libgsf-1-dev \
+        libexif-dev \
+        libvips-dev \
+        orc-0.4-dev \
+        libwebp-dev \
+        liblcms2-dev \
+        libpng-dev \
+        gobject-introspection
+
+ARG VIPS_VERSION=8.11.2
+ARG VIPS_URL=https://github.com/libvips/libvips/releases/download
+
+RUN cd /usr/local/src && \
+    wget ${VIPS_URL}/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.gz && \
+    tar -zxvf vips-${VIPS_VERSION}.tar.gz && \
+    rm -rf vips-${VIPS_VERSION}.tar.gz
+
+RUN cd /usr/local/src/vips-${VIPS_VERSION} && \
+    ./configure --enable-debug=no && \
+    make V=0 && \
+    make install && \
+    ldconfig
+
+# --------------------------------------------------------------- #
 FROM alpine/git:2.36.3 as scripts-downloader
 ARG SCRIPTS_REPO_TAG
 
@@ -33,33 +65,11 @@ RUN --mount=type=secret,id=scripts_repo_url \
     && cd /root/scripts \
     && git checkout tags/${SCRIPTS_REPO_TAG}
 
-# FROM debian:bullseye-slim AS vips-builder
-
-# RUN apt-get update && apt-get install -y build-essential wget
-
-# ARG VIPS_VERSION=8.11.2
-# ARG VIPS_URL=https://github.com/libvips/libvips/releases/download
-
-# RUN cd /usr/local/src && \
-#     wget ${VIPS_URL}/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.gz && \
-#     tar -zxvf vips-${VIPS_VERSION}.tar.gz && \
-#     rm -rf vips-${VIPS_VERSION}.tar.gz
-
-# RUN cd /usr/local/src/vips-${VIPS_VERSION} && \
-#     ./configure && \
-#     make V=0 && \
-#     make install && \
-#     ldconfig
-
 # --------------------------------------------------------------- #
-FROM python:3.8-slim-bullseye
+FROM python:3.8-slim-bullseye AS production
 
-
-ENV LANG C.UTF-8
-ENV DEBIAN_FRONTEND noninteractive
-
-RUN apt-get -y update && apt-get -y install --no-install-recommends --no-install-suggests \
-    ca-certificates exiftool
+RUN apt-get -y update && \
+    apt-get -y install --no-install-recommends --no-install-suggests git wget libjpeg-dev libtiff-dev
 
 COPY --from=openjpeg-builder /usr/lib/openjpeg-* /usr/lib/
 COPY --from=openjpeg-builder /usr/lib/openjpeg-* /usr/lib/
@@ -71,29 +81,43 @@ COPY --from=openjpeg-builder /usr/bin/opj_compress /usr/bin/opjcompress
 COPY --from=openjpeg-builder /usr/bin/opj_dump /usr/bin/opj_dump
 
 # Download plugins
+ARG PLUGIN_CSV=.scripts/plugins-list.csv
 WORKDIR /app
 COPY ./docker/plugins.py /app/plugins.py
+COPY ${PLUGIN_CSV} /app/plugins.csv
 
-ARG PLUGIN_CSV
 # ="enabled,name,git_url,git_branch\n"
 ENV PLUGIN_INSTALL_PATH /app/plugins
 RUN python plugins.py \
-   --plugin_csv ${PLUGIN_CSV} \
+   --plugin_csv_path /app/plugins.csv \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method download
 
 # Run before_vips() from plugins prerequisites
 RUN python plugins.py \
-   --plugin_csv ${PLUGIN_CSV} \
+   --plugin_csv_path /app/plugins.csv \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method dependencies_before_vips
 
 # vips
-RUN apt-get -y update && apt-get -y install --no-install-recommends --no-install-suggests libvips
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --no-install-suggests \
+        libjpeg62-turbo-dev \
+        libpng-dev \
+        libgif-dev \
+        libtiff-dev \
+        libwebp-dev \
+        libxml2-dev \
+        libexpat1-dev \
+        liborc-0.4-dev
+        
+COPY --from=vips-builder /usr/local/include/vips/* /usr/local/include/vips
+COPY --from=vips-builder /usr/local/lib/libvips* /usr/local/lib/
+COPY --from=vips-builder /usr/local/bin/* /usr/local/bin
 
 # Run before_python() from plugins prerequisites
 RUN python plugins.py \
-   --plugin_csv ${PLUGIN_CSV} \
+   --plugin_csv_path /app/plugins.csv \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method dependencies_before_python
 
@@ -109,7 +133,7 @@ RUN pip install --no-cache-dir gunicorn==${GUNICORN_VERSION} && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir setuptools==${SETUPTOOLS_VERSION} && \
     python plugins.py \
-   --plugin_csv ${PLUGIN_CSV} \
+   --plugin_csv_path /app/plugins.csv \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method install
 

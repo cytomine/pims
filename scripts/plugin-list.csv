@@ -1,4 +1,4 @@
 enabled,name,git_url,git_branch
-1,pims-plugin-format-openslide,https://github.com/cytomine/pims-plugin-format-openslide.git,main
+1,pims-plugin-format-openslide,https://github.com/cytomine/pims-plugin-format-openslide.git,from-apt-get
 1,pims-plugin-format-bioformats,https://github.com/cytomine/pims-plugin-format-bioformats.git,main
 1,pims-plugin-format-dicom,https://github.com/cytomine/pims-plugin-format-dicom.git,master
