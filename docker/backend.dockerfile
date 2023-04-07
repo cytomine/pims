@@ -64,14 +64,14 @@ RUN rsync -avRL --no-links --relative --prune-empty-dirs /usr/local/include/vips
 
 # --------------------------------------------------------------- #
 FROM alpine/git:2.36.3 as scripts-downloader
-ARG SCRIPTS_REPO_TAG
+ARG SCRIPTS_REPO_TAG="latest"
+ARG SCRIPTS_REPO_URL="https://github.com/cytomine/cytomine-docker-entrypoint-scripts"
 
 WORKDIR /root
 RUN mkdir scripts
-RUN --mount=type=secret,id=scripts_repo_url \
-    git clone $(cat /run/secrets/scripts_repo_url) /root/scripts \
+RUN git clone $SCRIPTS_REPO_URL /root/scripts \
     && cd /root/scripts \
-    && git checkout tags/${SCRIPTS_REPO_TAG}
+    && git checkout tags/$SCRIPTS_REPO_TAG
 
 # --------------------------------------------------------------- #
 FROM python:3.8-slim-bullseye AS dependencies-with-plugins
