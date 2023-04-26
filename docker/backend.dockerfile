@@ -1,3 +1,7 @@
+FROM cytomine/entrypoint-scripts:1.2.0 as scripts-downloader
+
+# For configuration scripts 
+
 FROM ubuntu:20.04
 
 ENV LANG C.UTF-8
@@ -131,6 +135,12 @@ RUN chmod +x /start-reload.sh
 
 ENV PYTHONPATH="/app:$PYTHONPATH"
 
+# entrypoint scripts
+RUN mkdir /docker-entrypoint-cytomine.d/
+COPY --from=scripts-downloader --chmod=774 /root/scripts/cytomine-entrypoint.sh /usr/local/bin/
+COPY --from=scripts-downloader --chmod=774 /root/scripts/envsubst-on-templates-and-move.sh /docker-entrypoint-cytomine.d/500-envsubst-on-templates-and-move.sh
+COPY --from=scripts-downloader --chmod=774 /root/scripts/configure-etc-hosts-reverse-proxy.sh /docker-entrypoint-cytomine.d/750-configure-etc-hosts-reverse-proxy.sh
+
 # Add app
 COPY ./pims /app/pims
 ENV MODULE_NAME="pims.application"
@@ -139,4 +149,5 @@ ENV PYTHONPATH="/app:$PYTHONPATH"
 ENV PORT=5000
 EXPOSE ${PORT}
 
+ENTRYPOINT ["cytomine-entrypoint.sh"]
 CMD ["/start.sh"]
