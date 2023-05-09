@@ -124,7 +124,7 @@ publish-docker-image:
   script:
     - |
       if [ $IS_OPEN_SOURCE_RELEASE_CANDIDATE = "true" ]; then
-        export DOCKER_IMAGE_NAME=DOCKERHUB_PIMS_REPO
+        export DOCKER_IMAGE_NAME=$DOCKERHUB_PIMS_REPO
         export TARGET_CI_REGISTRY=$DOCKERHUB_URL
         export TARGET_CI_REGISTRY_USER=$DOCKERHUB_USER
         export TARGET_CI_REGISTRY_PASSWORD=$DOCKERHUB_PASSWORD
