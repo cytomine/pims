@@ -48,8 +48,8 @@ def download_plugins(plugins, install_path):
 
         path = os.path.join(install_path, plugin['name'])
         command = f"git clone {plugin['git_url']} {path}"
-        if plugin['git_branch']:
-            command += f" && cd {path} && git checkout {plugin['git_branch']}"
+        if plugin['git_branch_or_tag']:
+            command += f" && cd {path} && git checkout {plugin['git_branch_or_tag']}"
         
         output = subprocess.run(command, shell=True, check=True)
         print(output.stdout)
