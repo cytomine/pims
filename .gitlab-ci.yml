@@ -63,7 +63,7 @@ build-python-package:
     - echo "CANONICAL_VERSION_NUMBER=$VERSION" > .env
   artifacts:
     paths:
-      - dist/pims-*.tar.gz
+      - dist/cytomine-pims-*.tar.gz
     reports:
       # to export canonical version number
       dotenv: .env
