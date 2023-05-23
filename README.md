@@ -1,6 +1,6 @@
-# pims
+# cytomine-pims
 
-Python Image Management Server
+Cytomine Python Image Management Server
 
 ## Run development server with Docker
 
