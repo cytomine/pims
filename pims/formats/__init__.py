@@ -18,17 +18,50 @@ from inspect import isabstract, isclass
 from pkgutil import iter_modules
 from types import ModuleType
 from typing import Dict, List, Type, Union
+from pims.config import get_settings
+import csv
+import os
 
 from importlib_metadata import EntryPoint, entry_points  # noqa
 
 from pims.formats.utils.abstract import AbstractFormat
 
-FORMAT_PLUGIN_PREFIX = 'pims_format_'
+FORMAT_PLUGIN_PREFIX = "pims_format_"
 NON_PLUGINS_MODULES = ["pims.formats.utils"]
 PLUGIN_GROUP = "pims.formats"
 
 logger = logging.getLogger("pims.app")
 logger.info("[green bold]Formats initialization...")
+
+
+def custom_sort_key(item, dictionary):
+    return dictionary.get(item, dictionary.get(getattr(item, "module", None), 0))
+
+
+def reorder_plugins(
+    plugin_list, csv_path, name_column="name", priority_column="priority"
+):
+    plugin_priorities = {}
+
+    for _, name, _ in iter_modules(__path__, prefix="pims.formats."):
+        if name not in NON_PLUGINS_MODULES:
+            plugin_priorities[name] = 0
+
+    with open(csv_path, "r") as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+            plugin_name = row[name_column]
+            priority = int(row[priority_column])
+
+            if plugin_name is not None and priority is not None:
+                plugin_priorities[plugin_name] = priority
+
+    sorted_plugin_list = sorted(
+        plugin_list, key=lambda x: custom_sort_key(x, plugin_priorities), reverse=True
+    )
+
+    return sorted_plugin_list
 
 
 def _discover_format_plugins() -> List[Union[str, EntryPoint]]:
@@ -49,16 +82,20 @@ def _discover_format_plugins() -> List[Union[str, EntryPoint]]:
     """
 
     plugins = [
-        name for _, name, _ in iter_modules(__path__, prefix="pims.formats.")
+        name
+        for _, name, _ in iter_modules(__path__, prefix="pims.formats.")
         if name not in NON_PLUGINS_MODULES
     ]
     plugins += [
-        name for _, name, _ in iter_modules()
-        if name.startswith(FORMAT_PLUGIN_PREFIX)
+        name for _, name, _ in iter_modules() if name.startswith(FORMAT_PLUGIN_PREFIX)
     ]
     plugins += entry_points(group=PLUGIN_GROUP)
 
     plugin_names = [p.module if type(p) is EntryPoint else p for p in plugins]
+
+    if os.path.isfile(get_settings().checker_resolution_file):
+        plugins = reorder_plugins(plugins, get_settings().checker_resolution_file)
+
     logger.info(
         f"[green bold]Format plugins: found {len(plugins)} plugin(s)[/] "
         f"[yellow]({', '.join(plugin_names)})"
@@ -85,10 +122,12 @@ def _find_formats_in_module(mod: ModuleType) -> List[Type[AbstractFormat]]:
         submodule_name = f"{mod.__name__}.{name}"
         try:
             for var in vars(import_module(submodule_name)).values():
-                if isclass(var) and \
-                        issubclass(var, AbstractFormat) and \
-                        not isabstract(var) and \
-                        'Abstract' not in var.__name__:
+                if (
+                    isclass(var)
+                    and issubclass(var, AbstractFormat)
+                    and not isabstract(var)
+                    and "Abstract" not in var.__name__
+                ):
                     format = var
                     formats.append(format)
                     format.init()
@@ -99,8 +138,8 @@ def _find_formats_in_module(mod: ModuleType) -> List[Type[AbstractFormat]]:
                     )
         except ImportError as e:
             logger.error(
-                f"{submodule_name} submodule cannot be checked for "
-                f"formats !", exc_info=e
+                f"{submodule_name} submodule cannot be checked for " f"formats !",
+                exc_info=e,
             )
     return formats
 
@@ -120,8 +159,7 @@ def _get_all_formats() -> List[Type[AbstractFormat]]:
 
         module_name = plugin.module if entrypoint_plugin else plugin
         logger.info(
-            f"[green bold]Importing formats from "
-            f"[yellow]{module_name}[/] plugin..."
+            f"[green bold]Importing formats from " f"[yellow]{module_name}[/] plugin..."
         )
 
         if entrypoint_plugin:
@@ -137,7 +175,4 @@ FormatsByExt = Dict[str, Type[AbstractFormat]]
 
 
 FORMAT_PLUGINS: List[Union[str, EntryPoint]] = _discover_format_plugins()
-FORMATS: FormatsByExt = {
-    f.get_identifier(): f
-    for f in _get_all_formats()
-}
+FORMATS: FormatsByExt = {f.get_identifier(): f for f in _get_all_formats()}
