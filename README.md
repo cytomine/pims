@@ -123,3 +123,20 @@ One can find below the listing of the PIMS plugins that have already been implem
 | Openslide  | BIF, MRXS, NDPi, Philips TIFF, SCN, SVS, VMS  | https://github.com/cytomine/pims-plugin-format-openslide/tree/main/pims_plugin_format_openslide  | Depends on VIPS and Openslide. |
 | Example  | / |  https://github.com/cytomine/pims-plugin-format-example | This is just a example plugin to explain how to implement a PIMS plugin.  |
 | WSI Dicom  | WSIDICOM  | https://github.com/cytomine/pims-plugin-format-dicom  | PIMS plugin based on the WSI Dicom format implemented [here](https://github.com/imi-bigpicture/wsidicom). Annotations management not implemented yet. |
+
+### Docker image with plugins resolution priority 
+During the upload of an image, a check is made to ensure the existence of the image format in accordance with the plugins installed with the Cytomine instance (these pulgins are specified in the CSV file named `plugin-list.csv`). To ensure that the uploaded file is handle with the right format resolver, one must define the resolution priority of the plugins such that the most conservative checker happens before the less conservative one. 
+
+One will find a priority column in the `plugin-list.csv`: this column must be either filled with integer or set as no value (in which case the priority will be the same as the native formats already installed in a Cytomine instance). The higher the integer, the higher the priority, such that all formats within this plugin will be checked first.
+
+### Run development server locally with plugins resolution priority 
+
+In development mode, one can now create a new `checkerResolution.csv` file (name and path of this file can be defined in `pims-dev-config.env`) in order to specify format checkers resolution order. 
+
+The CSV file must apply the following convention: 
+| name | priority | 
+|---|---|
+|`pims_plugin_format_{name}`| `INT` or `empty`|  
+
+* `pims_plugin_format_{name}` must be the string referring to the name of the plugin as specified in the source directory. 
+* the priority must be an integer or set as no value (in which case the priority will be the same as the native formats already installed in a Cytomine instance). The higher the integer, the higher the priority, such that all formats within this plugin will be checked first.
