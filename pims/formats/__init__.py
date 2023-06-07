@@ -12,6 +12,7 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 
+from functools import partial
 import logging
 from importlib import import_module
 from inspect import isabstract, isclass
@@ -58,7 +59,7 @@ def reorder_plugins(
                 plugin_priorities[plugin_name] = priority
 
     sorted_plugin_list = sorted(
-        plugin_list, key=lambda x: custom_sort_key(x, plugin_priorities), reverse=True
+        plugin_list, partial(custom_sort_key, dictionary=plugin_priorities), reverse=True
     )
 
     return sorted_plugin_list

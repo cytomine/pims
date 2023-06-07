@@ -76,8 +76,6 @@ RUN python plugins.py \
 RUN python plugins.py \
    --plugin_csv /app/plugins.csv \
    --checkerResolution_file_path checkerResolution.csv \
-   --priority_column priority \ 
-   --name_column name \
    --method checker_resolution_file
 
 # Run before_vips() from plugins prerequisites
