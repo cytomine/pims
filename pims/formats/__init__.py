@@ -17,6 +17,7 @@ import logging
 from importlib import import_module
 from inspect import isabstract, isclass
 from pkgutil import iter_modules
+
 from types import ModuleType
 from typing import Dict, List, Type, Union
 from pims.config import get_settings
@@ -40,26 +41,26 @@ def custom_sort_key(item, dictionary):
 
 
 def reorder_plugins(
-    plugin_list, csv_path, name_column="name", priority_column="priority"
+    plugin_list, csv_path, name_column="name", resolution_order_column="resolution_order"
 ):
-    plugin_priorities = {}
+    plugin_resolution_orders = {}
 
     for _, name, _ in iter_modules(__path__, prefix="pims.formats."):
         if name not in NON_PLUGINS_MODULES:
-            plugin_priorities[name] = 0
+            plugin_resolution_orders[name] = 0
 
     with open(csv_path, "r") as file:
         reader = csv.DictReader(file)
 
         for row in reader:
             plugin_name = row[name_column]
-            priority = int(row[priority_column])
+            resolution_order = int(row[resolution_order_column])
 
-            if plugin_name is not None and priority is not None:
-                plugin_priorities[plugin_name] = priority
-
+            if plugin_name is not None and resolution_order is not None:
+                plugin_resolution_orders[plugin_name] = resolution_order
+                
     sorted_plugin_list = sorted(
-        plugin_list, partial(custom_sort_key, dictionary=plugin_priorities), reverse=True
+        plugin_list, key=partial(custom_sort_key, dictionary=plugin_resolution_orders)
     )
 
     return sorted_plugin_list
