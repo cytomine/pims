@@ -124,19 +124,21 @@ One can find below the listing of the PIMS plugins that have already been implem
 | Example  | / |  https://github.com/cytomine/pims-plugin-format-example | This is just a example plugin to explain how to implement a PIMS plugin.  |
 | WSI Dicom  | WSIDICOM  | https://github.com/cytomine/pims-plugin-format-dicom  | PIMS plugin based on the WSI Dicom format implemented [here](https://github.com/imi-bigpicture/wsidicom). Annotations management not implemented yet. |
 
-### Docker image with plugins resolution priority 
-During the upload of an image, a check is made to ensure the existence of the image format in accordance with the plugins installed with the Cytomine instance (these pulgins are specified in the CSV file named `plugin-list.csv`). To ensure that the uploaded file is handle with the right format resolver, one must define the resolution priority of the plugins such that the most conservative checker happens before the less conservative one. 
+### Docker image with plugins resolution order 
+During the upload of an image, a check is made to ensure the existence of the image format in accordance with the plugins installed with the Cytomine instance (these pulgins are specified in the CSV file named `plugin-list.csv`). To ensure that the uploaded file is handle with the right format resolver, one must define the resolution order of the plugins such that the most conservative checker happens before the less conservative one. 
 
-One will find a priority column in the `plugin-list.csv`: this column must be either filled with integer or set as no value (in which case the priority will be the same as the native formats already installed in a Cytomine instance). The higher the integer, the higher the priority, such that all formats within this plugin will be checked first.
+One will find a resolution order column in the `plugin-list.csv`: this column must be either filled with integer or set as no value. The value set will order the desired plugin with respect to the native formats in PIMS which order in zero (0). The plugin with the lowest integer for the resolution order will be checked first. In order terms, if the resolution order of one plugin is the most negative, the formats within the plugin will be checked before all specified formats, including the native formats in PIMS. In the case where no value is set, the resolution order will be the same as the native formats in PIMS (i.e, 0). 
 
-### Run development server locally with plugins resolution priority 
+### Run development server locally with plugins resolution order 
 
 In development mode, one can now create a new `checkerResolution.csv` file (name and path of this file can be defined in `pims-dev-config.env`) in order to specify format checkers resolution order. 
 
 The CSV file must apply the following convention: 
-| name | priority | 
+| name | resolution_order | 
 |---|---|
 |`pims_plugin_format_{name}`| `INT` or `empty`|  
 
 * `pims_plugin_format_{name}` must be the string referring to the name of the plugin as specified in the source directory. 
-* the priority must be an integer or set as no value (in which case the priority will be the same as the native formats already installed in a Cytomine instance). The higher the integer, the higher the priority, such that all formats within this plugin will be checked first.
+* the resolution order must be an integer or set as no value. The value set will order the desired plugin with respect to the native formats in PIMS which order in zero (0). The plugin with the lowest integer for the resolution order will be checked first. In order terms, if the resolution order of one plugin is the most negative, the formats within the plugin will be checked before all specified formats, including the native formats in PIMS. In the case where no value is set, the resolution order will be the same as the native formats in PIMS (i.e, 0).  
+
+To obtain this file, one can adapt the `plugin-list.csv` file with the wanted resolution order and run the following command in the docker repository : `python plugins.py --plugin_csv_path=/pims-ce/scripts/plugin-list.csv --checkerResolution_file_path=/pims-ce/checkerResolution.csv --method=checker_resolution_file`
