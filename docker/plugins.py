@@ -40,25 +40,25 @@ def load_plugin_list(csv_path):
         ]
 
 
-def generate_checker_resolution_file(plugins, csv_path, name_column, priority_column):
+def generate_checker_resolution_file(plugins, csv_path, name_column, resolution_order_column):
     with open(csv_path, "w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=[name_column, priority_column])
+        writer = csv.DictWriter(file, fieldnames=[name_column, resolution_order_column])
         writer.writeheader()
         for plugin in plugins:
             name = plugin.get(name_column).strip()
-            priority = plugin.get(priority_column, 0).strip()
-            if re.match(r"^(?:-?[0-9]+)?$", priority) is None:
+            resolution_order = plugin.get(resolution_order_column, 0).strip()
+            if re.match(r"^(?:-?[0-9]+)?$", resolution_order) is None:
                 raise ValueError(
-                    "Review priority '"
-                    + priority
+                    "Review resolution order '"
+                    + resolution_order
                     + "' for plugin "
                     + name
-                    + ": the priority must be an integer or empty string"
+                    + ": the resolution order must be an integer or empty string"
                 )
             else:
-                priority = int(priority) if len(priority) > 0 else 0
+                resolution_order = int(resolution_order) if len(resolution_order) > 0 else 0
 
-            writer.writerow({name_column: name, priority_column: priority})
+            writer.writerow({name_column: name, resolution_order_column: resolution_order})
 
 
 def enabled_plugins(plugins):
@@ -109,13 +109,13 @@ if __name__ == "__main__":
     parser.add_argument("--plugin_csv_path", help="Plugin list CSV path")
     parser.add_argument(
         "--checkerResolution_file_path",
-        help="Priorities plugin CSV path",
+        help="resolution_orders plugin CSV path",
         default="checkerResolution.csv",
     )
     parser.add_argument(
-        "--priority_column",
-        help="Name of the priority column from plugin list for checkerResolution file",
-        default="priority",
+        "--resolution_order_column",
+        help="Name of the resolution_order column from plugin list for checkerResolution file",
+        default="resolution_order",
     )
     parser.add_argument(
         "--name_column",
@@ -137,7 +137,7 @@ if __name__ == "__main__":
             plugins,
             params.checkerResolution_file_path,
             params.name_column,
-            params.priority_column,
+            params.resolution_order_column,
         )
     else:
         os.makedirs(params.install_path, exist_ok=True)
