@@ -73,6 +73,11 @@ RUN python plugins.py \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method download
 
+RUN python plugins.py \
+   --plugin_csv /app/plugins.csv \
+   --checkerResolution_file_path checkerResolution.csv \
+   --method checker_resolution_file
+
 # Run before_vips() from plugins prerequisites
 RUN python plugins.py \
    --plugin_csv /app/plugins.csv \
