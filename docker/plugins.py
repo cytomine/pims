@@ -133,12 +133,13 @@ if __name__ == "__main__":
     plugins = enabled_plugins(load_plugin_list(params.plugin_csv_path))
 
     if params.method == Method.GENERATE_CHECKER_RESOLUTION_FILE:
-        generate_checker_resolution_file(
-            plugins,
-            params.checkerResolution_file_path,
-            params.name_column,
-            params.resolution_order_column,
-        )
+        if params.resolution_order_column in plugins[0]:
+            generate_checker_resolution_file(
+                plugins,
+                params.checkerResolution_file_path,
+                params.name_column,
+                params.resolution_order_column,
+            )
     else:
         os.makedirs(params.install_path, exist_ok=True)
         if params.method == Method.DOWNLOAD:
