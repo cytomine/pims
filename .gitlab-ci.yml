@@ -72,9 +72,9 @@ build-docker-image-for-tests:
         --build-arg UBUNTU_VERSION=${UBUNTU_VERSION} \
         --build-arg VIPS_URL=${VIPS_URL} \
         --build-arg VIPS_VERSION=${VIPS_VERSION} \
-        --secret id=scripts_repo_url,env=SCRIPTS_REPO_FULL_URL \
-        -t $DOCKER_IMAGE_NAME_FOR_TESTS \
-        -f docker/backend.dockerfile \
+        --secret "id=scripts_repo_url,env=SCRIPTS_REPO_FULL_URL" \
+        -t "$DOCKER_IMAGE_NAME_FOR_TESTS" \
+        -f "docker/backend.dockerfile" \
         .
 
 run-pytest:
