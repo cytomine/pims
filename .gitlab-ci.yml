@@ -59,6 +59,23 @@ build-docker-image-for-tests:
   image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:latest
   script:
     - export SCRIPTS_REPO_FULL_URL=https://$SCRIPTS_REPO_ACCESS_TOKEN_NAME:$SCRIPTS_REPO_ACCESS_TOKEN_VALUE@$SCRIPTS_REPO_URL
+    - |
+      echo "Command is docker build \
+        --build-arg SCRIPTS_REPO_TAG=latest \
+        --build-arg ENTRYPOINT_SCRIPTS_VERSION=${ENTRYPOINT_SCRIPTS_VERSION} \
+        --build-arg GUNICORN_VERSION=${GUNICORN_VERSION} \
+        --build-arg OPENJPEG_URL=${OPENJPEG_URL} \
+        --build-arg OPENJPEG_VERSION=${OPENJPEG_VERSION} \
+        --build-arg PLUGIN_CSV="scripts/plugin-list.csv" \
+        --build-arg PY_VERSION=${PY_VERSION} \
+        --build-arg SETUPTOOLS_VERSION=${SETUPTOOLS_VERSION} \
+        --build-arg UBUNTU_VERSION=${UBUNTU_VERSION} \
+        --build-arg VIPS_URL=${VIPS_URL} \
+        --build-arg VIPS_VERSION=${VIPS_VERSION} \
+        --secret "id=scripts_repo_url,env=SCRIPTS_REPO_FULL_URL" \
+        -t "${DOCKER_IMAGE_NAME_FOR_TESTS}" \
+        -f docker/backend.dockerfile \
+        ."
     - | 
       docker build \
         --build-arg SCRIPTS_REPO_TAG=latest \
@@ -66,15 +83,15 @@ build-docker-image-for-tests:
         --build-arg GUNICORN_VERSION=${GUNICORN_VERSION} \
         --build-arg OPENJPEG_URL=${OPENJPEG_URL} \
         --build-arg OPENJPEG_VERSION=${OPENJPEG_VERSION} \
-        --build-arg PLUGIN_CSV="scripts/plugin-list.csv" \ 
+        --build-arg PLUGIN_CSV="scripts/plugin-list.csv" \
         --build-arg PY_VERSION=${PY_VERSION} \
         --build-arg SETUPTOOLS_VERSION=${SETUPTOOLS_VERSION} \
         --build-arg UBUNTU_VERSION=${UBUNTU_VERSION} \
         --build-arg VIPS_URL=${VIPS_URL} \
         --build-arg VIPS_VERSION=${VIPS_VERSION} \
         --secret "id=scripts_repo_url,env=SCRIPTS_REPO_FULL_URL" \
-        -t "$DOCKER_IMAGE_NAME_FOR_TESTS" \
-        -f "docker/backend.dockerfile" \
+        -t "${DOCKER_IMAGE_NAME_FOR_TESTS}" \
+        -f docker/backend.dockerfile \
         .
 
 run-pytest:
