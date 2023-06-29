@@ -9,9 +9,6 @@ stages:
 # - DOCKERHUB_URL: url of dockerhub (e.g. docker.io)
 # - DOCKERHUB_USER: cytomine username on dockerhub
 # - DOCKERHUB_PASSWORD: cytomine password on dockerhub
-# - SCRIPTS_REPO_ACCESS_TOKEN_NAME: access token name for docker-entrypoint-scripts repo
-# - SCRIPTS_REPO_ACCESS_TOKEN_VALUE: access token value for docker-entrypoint-scripts repo
-# - SCRIPTS_REPO_URL: git url (no scheme/protocol) of the docker-entrypoint-scripts repo
 # - PYPI_USERNAME: pypi username for package upload
 # - PYPI_PASSWORD: pypi password for package upload
 
@@ -58,10 +55,8 @@ build-docker-image-for-tests:
   stage: prepare
   image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:latest
   script:
-    - export SCRIPTS_REPO_FULL_URL=https://$SCRIPTS_REPO_ACCESS_TOKEN_NAME:$SCRIPTS_REPO_ACCESS_TOKEN_VALUE@$SCRIPTS_REPO_URL
     - | 
       docker build \
-        --build-arg SCRIPTS_REPO_TAG=latest \
         --build-arg ENTRYPOINT_SCRIPTS_VERSION=${ENTRYPOINT_SCRIPTS_VERSION} \
         --build-arg GUNICORN_VERSION=${GUNICORN_VERSION} \
         --build-arg OPENJPEG_URL=${OPENJPEG_URL} \
@@ -72,7 +67,6 @@ build-docker-image-for-tests:
         --build-arg UBUNTU_VERSION=${UBUNTU_VERSION} \
         --build-arg VIPS_URL=${VIPS_URL} \
         --build-arg VIPS_VERSION=${VIPS_VERSION} \
-        --secret "id=scripts_repo_url,env=SCRIPTS_REPO_FULL_URL" \
         -t "${DOCKER_IMAGE_NAME_FOR_TESTS}" \
         -f docker/backend.dockerfile \
         .
