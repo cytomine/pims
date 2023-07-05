@@ -19,7 +19,7 @@ from cytomine import Cytomine
 from cytomine.models import (
     Project, ProjectCollection, Storage, UploadedFile
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 
@@ -63,8 +63,10 @@ async def legacy_import(
     upload_name: str = Form(..., alias="files[].name"),
     upload_path: str = Form(..., alias="files[].path"),
     upload_size: int = Form(..., alias="files[].size"),
-    config: Settings = Depends(get_settings)
+    config: Settings = Depends(get_settings),
+    file: Optional[UploadFile] = File(None,alias="files[].file")
 ):
+
     """
     Import a file (legacy)
     """
@@ -159,11 +161,20 @@ async def legacy_import(
                     }], status_code=400
                 )
         else:
-            send_task(
-                Task.IMPORT_WITH_CYTOMINE,
-                args=[cytomine_auth, upload_path, upload_name, cytomine, False],
-                starlette_background=background
-            )
+            if file is None:
+                send_task(
+                    Task.IMPORT_WITH_CYTOMINE,
+                    args=[cytomine_auth, upload_path, upload_name, cytomine, False],
+                    starlette_background=background
+                )
+            else: 
+                file_content = await file.read()
+                send_task(
+                    Task.IMPORT_WITH_FILE,
+                    args=[file_content, upload_path, upload_name, cytomine, False],
+                    starlette_background=background
+                )
+
             return JSONResponse(
                 content=[{
                     "status": 200,

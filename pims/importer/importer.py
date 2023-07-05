@@ -12,11 +12,13 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import logging
+import os
 import shutil
 from typing import List, Optional
 
 from celery import group, signature
-from celery.result import allow_join_result  # noqa
+from celery.result import allow_join_result
+from fastapi import UploadFile  # noqa
 
 from pims.api.exceptions import (
     BadRequestException, FilepathNotFoundProblem,
@@ -505,3 +507,29 @@ def run_import(
     listeners = [StdoutListener(name)] + extra_listeners
     fi = FileImporter(pending_file, name, listeners)
     fi.run(prefer_copy)
+
+
+def run_import_with_file(
+    file_content: bytes, filepath: str, name: str, extra_listeners: Optional[List[ImportListener]] = None,
+    prefer_copy: bool = False
+):
+    writing_path = Path(filepath)
+
+    if extra_listeners is not None:
+        if not type(extra_listeners) is list:
+            extra_listeners = list(extra_listeners)
+    else:
+        extra_listeners = []    
+
+    listeners = [StdoutListener(name)] + extra_listeners
+
+    if not os.path.exists(writing_path.parent):
+        os.makedirs(writing_path.parent)
+
+    with open(writing_path, "wb") as f:
+        f.write(file_content)
+
+    fi = FileImporter(writing_path, name, listeners)
+    fi.run(prefer_copy)
+
+
