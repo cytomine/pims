@@ -12,15 +12,18 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import logging
+import os
+import re
 import traceback
 from typing import Optional
+import aiofiles
 
 from cytomine import Cytomine
 from cytomine.models import (
     Project, ProjectCollection, Storage, UploadedFile
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
-from starlette.requests import Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, HTTPException, status
+from starlette.requests import Request, ClientDisconnect
 from starlette.responses import FileResponse, JSONResponse
 
 from pims.api.exceptions import (
@@ -36,11 +39,12 @@ from pims.api.utils.response import serialize_cytomine_model
 from pims.config import Settings, get_settings
 from pims.files.archive import make_zip_archive
 from pims.files.file import Path
-from pims.importer.importer import run_import
-from pims.importer.listeners import CytomineListener
+from pims.importer.importer import FileImporter, run_import
+from pims.importer.listeners import CytomineListener, StdoutListener
 from pims.tasks.queue import Task, send_task
 from pims.utils.iterables import ensure_list
 from pims.utils.strings import unique_name_generator
+
 
 router = APIRouter()
 
@@ -141,6 +145,7 @@ async def legacy_import(
                 return [{
                     "status": 200,
                     "name": upload_name,
+                    "size" : upload_size,
                     "uploadedFile": serialize_cytomine_model(root),
                     "images": [{
                         "image": serialize_cytomine_model(image[0]),
@@ -179,10 +184,180 @@ async def legacy_import(
                 content=[{
                     "status": 200,
                     "name": upload_name,
+                    "size" : upload_size,
                     "uploadedFile": serialize_cytomine_model(root),
                     "images": []
                 }], status_code=200
             )
+        
+@router.post('/upload/direct', tags=['Import'])
+async def import_direct(
+    background: BackgroundTasks,
+    storage: Optional[int] = None,
+    id_storage: Optional[int] = Query(None, alias='idStorage'),
+    projects: Optional[str] = None,
+    id_project: Optional[str] = Query(None, alias='idProject'),
+    sync: Optional[bool] = False,
+    file: UploadFile = File(...,alias="files[].file")
+):
+
+    """
+    Import a file (legacy)
+    """
+    PENDING_PATH = get_settings().pending_path
+
+    id_storage = id_storage if id_storage is not None else storage
+    if not id_storage:
+        raise BadRequestException(detail="idStorage or storage parameter missing.")
+
+    projects_to_parse = id_project if id_project is not None else projects
+    try:
+        id_projects = []
+        if projects_to_parse:
+            projects = ensure_list(projects_to_parse.split(","))
+            id_projects = [int(p) for p in projects]
+    except ValueError:
+        raise BadRequestException(detail="Invalid projects or idProject parameter.")
+    
+    name = sanitize_filename(file.filename)
+    filepath = PENDING_PATH
+    file_content = await file.read()
+    pending_path = Path(filepath,name)
+
+    if not os.path.exists(pending_path.parent):
+        os.makedirs(pending_path.parent)
+
+    with open(pending_path, "wb") as f:
+        f.write(file_content)
+
+    if sync:
+        try:
+            run_import(
+                None, pending_path, name, None, prefer_copy=False
+            )
+            return [{
+                "status": 200,
+                "name": name,
+                "size" : len(file_content)
+            }]
+        except Exception as e:
+            traceback.print_exc()
+            return JSONResponse(
+                content=[{
+                    "status": 500,
+                    "error": str(e),
+                    "files": [{
+                        "name": name,
+                        "size": 0,
+                        "error": str(e)
+                    }]
+                }], status_code=400
+            )
+    else:
+        send_task(
+            Task.IMPORT_WITH_CYTOMINE,
+            args=[None, pending_path, name, None, False],
+            starlette_background=background
+        )
+
+    return JSONResponse(
+        content=[{
+            "status": 200,
+            "name": name,
+            "size" : len(file_content)
+        }], status_code=200
+    )
+
+@router.post('/upload/direct-chunks', tags=['Import'])
+async def import_direct_chunks(
+    background: BackgroundTasks,
+    request: Request, 
+    storage: Optional[int] = None,
+    id_storage: Optional[int] = Query(None, alias='idStorage'),
+    projects: Optional[str] = None,
+    id_project: Optional[str] = Query(None, alias='idProject'),
+    sync: Optional[bool] = False
+):
+
+    """
+    Import a file (legacy)
+    """
+    PENDING_PATH = get_settings().pending_path
+    filename_pattern = r'filename="([^"]+)"'
+
+    id_storage = id_storage if id_storage is not None else storage
+    if not id_storage:
+        raise BadRequestException(detail="idStorage or storage parameter missing.")
+
+    projects_to_parse = id_project if id_project is not None else projects
+    try:
+        id_projects = []
+        if projects_to_parse:
+            projects = ensure_list(projects_to_parse.split(","))
+            id_projects = [int(p) for p in projects]
+    except ValueError:
+        raise BadRequestException(detail="Invalid projects or idProject parameter.")
+    
+    first_chunk = True
+    upload_path = PENDING_PATH
+    name = "tmp-name"
+    pending_path = Path(upload_path,name)
+
+    async with aiofiles.open(pending_path, 'wb') as f:
+        async with aiofiles.open(pending_path, 'wb') as f:
+            async for chunk in request.stream():
+                if first_chunk:
+                    empty_line_index = chunk.find(b'\r\n\r\n')
+                    if empty_line_index != -1:
+                        header_chunk = chunk[:empty_line_index].decode()
+                        match = re.search(filename_pattern, header_chunk)
+                        if match:
+                            name = match.group(1)
+                        else:
+                            name = 'no-name'
+                        chunk = chunk[empty_line_index + 4:]
+                        first_chunk=False
+                await f.write(chunk)
+
+    os.rename(pending_path, Path(upload_path,name))
+    pending_path = Path(upload_path,name)
+
+    if sync:
+        try:
+            run_import(
+                None, pending_path, name, None, False
+            )
+            return [{
+                "status": 200,
+                "name": name,
+                "size": request.headers['content-length'],
+            }]
+        except Exception as e:
+            traceback.print_exc()
+            return JSONResponse(
+                content=[{
+                    "status": 500,
+                    "error": str(e),
+                    "files": [{
+                        "size": 0,
+                        "error": str(e)
+                    }]
+                }], status_code=400
+            )
+    else:
+        send_task(
+            Task.IMPORT_WITH_CYTOMINE,
+            args=[None, pending_path, name, None, False],
+            starlette_background=background
+        )
+
+    return JSONResponse(
+        content=[{
+            "status": 200,
+            "name": name,
+            "size": request.headers['content-length'],
+        }], status_code=200
+    )
 
 
 def import_(filepath, body):

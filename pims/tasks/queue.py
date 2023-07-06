@@ -60,13 +60,11 @@ class Task(str, Enum):
 CELERY_TASK_MAPPING = {
     Task.IMPORT: "pims.tasks.worker.run_import",
     Task.IMPORT_WITH_CYTOMINE: "pims.tasks.worker.run_import_with_cytomine",
-    Task.IMPORT_WITH_FILE: "pims.tasks.worker.run_import_with_file",
 }
 
 BG_TASK_MAPPING = {
     Task.IMPORT: "pims.tasks.worker.run_import_fallback",
     Task.IMPORT_WITH_CYTOMINE: "pims.tasks.worker.run_import_with_cytomine_fallback",
-    Task.IMPORT_WITH_FILE: "pims.tasks.worker.run_import_with_file",
 }
 
 

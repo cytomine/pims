@@ -23,7 +23,6 @@ except:  # noqa
 
 from pims.api.exceptions import AuthenticationException
 from pims.importer.importer import run_import as run_import_
-from pims.importer.importer import run_import_with_file as run_import_with_file_
 from pims.tasks.queue import celery_app
 
 
@@ -44,15 +43,6 @@ def run_import_with_cytomine_fallback(
 ):
     run_import_(
         filepath, name,
-        extra_listeners=[cytomine_listener], prefer_copy=prefer_copy
-    )
-
-def run_import_with_file(
-    file_content, filepath, name, cytomine_listener, prefer_copy
-):
-
-    run_import_with_file_(
-        file_content, filepath, name,
         extra_listeners=[cytomine_listener], prefer_copy=prefer_copy
     )
 
