@@ -138,7 +138,7 @@ RUN pip install --no-cache-dir gunicorn==${GUNICORN_VERSION} && \
    --plugin_csv /app/plugins.csv \
    --install_path ${PLUGIN_INSTALL_PATH} \
    --method install & \
-    rm /app/plugin.csv
+    rm -f /app/plugins.csv
 
 # Add default config
 COPY ./pims-config.env /app/pims-config.env
