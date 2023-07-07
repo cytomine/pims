@@ -22,13 +22,14 @@ from cytomine import Cytomine
 from cytomine.models import (
     Project, ProjectCollection, Storage, UploadedFile
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, HTTPException, status
-from starlette.requests import Request, ClientDisconnect
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
+from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
+from starlette.formparsers import MultiPartMessage, MultiPartParser, _user_safe_decode
 
 from pims.api.exceptions import (
     AuthenticationException, BadRequestException, CytomineProblem,
-    NotAFileProblem, check_representation_existence
+    check_representation_existence
 )
 from pims.api.utils.cytomine_auth import (
     get_this_image_server, parse_authorization_header,
@@ -39,12 +40,18 @@ from pims.api.utils.response import serialize_cytomine_model
 from pims.config import Settings, get_settings
 from pims.files.archive import make_zip_archive
 from pims.files.file import Path
-from pims.importer.importer import FileImporter, run_import
-from pims.importer.listeners import CytomineListener, StdoutListener
+from pims.importer.importer import run_import
+from pims.importer.listeners import CytomineListener
 from pims.tasks.queue import Task, send_task
 from pims.utils.iterables import ensure_list
 from pims.utils.strings import unique_name_generator
 
+try:
+    import multipart
+    from multipart.multipart import parse_options_header
+except ModuleNotFoundError:  # pragma: nocover
+    parse_options_header = None
+    multipart = None
 
 router = APIRouter()
 
@@ -68,7 +75,6 @@ async def legacy_import(
     upload_path: str = Form(..., alias="files[].path"),
     upload_size: int = Form(..., alias="files[].size"),
     config: Settings = Depends(get_settings),
-    file: Optional[UploadFile] = File(None,alias="files[].file")
 ):
 
     """
@@ -166,19 +172,11 @@ async def legacy_import(
                     }], status_code=400
                 )
         else:
-            if file is None:
-                send_task(
-                    Task.IMPORT_WITH_CYTOMINE,
-                    args=[cytomine_auth, upload_path, upload_name, cytomine, False],
-                    starlette_background=background
-                )
-            else: 
-                file_content = await file.read()
-                send_task(
-                    Task.IMPORT_WITH_FILE,
-                    args=[file_content, upload_path, upload_name, cytomine, False],
-                    starlette_background=background
-                )
+            send_task(
+                Task.IMPORT_WITH_CYTOMINE,
+                args=[cytomine_auth, upload_path, upload_name, cytomine, False],
+                starlette_background=background
+            )
 
             return JSONResponse(
                 content=[{
@@ -298,29 +296,32 @@ async def import_direct_chunks(
     except ValueError:
         raise BadRequestException(detail="Invalid projects or idProject parameter.")
     
-    first_chunk = True
+    # first_chunk = True
     upload_path = PENDING_PATH
-    name = "tmp-name"
-    pending_path = Path(upload_path,name)
+    # name = "tmp-name"
+    # pending_path = Path(upload_path,name)
 
-    async with aiofiles.open(pending_path, 'wb') as f:
-        async with aiofiles.open(pending_path, 'wb') as f:
-            async for chunk in request.stream():
-                if first_chunk:
-                    empty_line_index = chunk.find(b'\r\n\r\n')
-                    if empty_line_index != -1:
-                        header_chunk = chunk[:empty_line_index].decode()
-                        match = re.search(filename_pattern, header_chunk)
-                        if match:
-                            name = match.group(1)
-                        else:
-                            name = 'no-name'
-                        chunk = chunk[empty_line_index + 4:]
-                        first_chunk=False
-                await f.write(chunk)
+    multipart_parser = MultiPartParser(request.headers, request.stream())
+    pending_path , name = await write_file(multipart_parser,upload_path)
 
-    os.rename(pending_path, Path(upload_path,name))
-    pending_path = Path(upload_path,name)
+
+    # async with aiofiles.open(pending_path, 'wb') as f:
+    #     async for chunk in request.stream():
+    #         if first_chunk:
+    #             empty_line_index = chunk.find(b'\r\n\r\n')
+    #             if empty_line_index != -1:
+    #                 header_chunk = chunk[:empty_line_index].decode()
+    #                 match = re.search(filename_pattern, header_chunk)
+    #                 if match:
+    #                     name = match.group(1)
+    #                 else:
+    #                     name = 'no-name'
+    #                 chunk = chunk[empty_line_index + 4:]
+    #                 first_chunk=False
+    #         await f.write(chunk.strip())
+
+    # os.rename(pending_path, Path(upload_path,name))
+    # pending_path = Path(upload_path,name)
 
     if sync:
         try:
@@ -428,3 +429,69 @@ def export_upload(
 
 def delete(filepath):
     pass
+
+async def write_file(fastapi_parser: MultiPartParser, upload_path):
+    _, params = parse_options_header(fastapi_parser.headers["Content-Type"])
+    charset = params.get(b"charset", "utf-8")
+    if type(charset) == bytes:
+        charset = charset.decode("latin-1")
+    fastapi_parser._charset = charset
+    filename = 'no-name'
+
+    header_field = b""
+    header_value = b""
+    content_disposition = None
+    content_type = b""
+    field_name = ""
+    data = b""
+    pending_path = Path(upload_path,filename)
+
+    boundary = params[b"boundary"]
+    callbacks = {
+            "on_part_begin": fastapi_parser.on_part_begin,
+            "on_part_data": fastapi_parser.on_part_data,
+            "on_part_end": fastapi_parser.on_part_end,
+            "on_header_field": fastapi_parser.on_header_field,
+            "on_header_value": fastapi_parser.on_header_value,
+            "on_header_end": fastapi_parser.on_header_end,
+            "on_headers_finished": fastapi_parser.on_headers_finished,
+            "on_end": fastapi_parser.on_end,
+        }
+    parser = multipart.MultipartParser(boundary,callbacks)
+    async with aiofiles.open(pending_path, 'wb') as f:
+        async for chunk in fastapi_parser.stream:
+                    parser.write(chunk)
+                    messages = list(fastapi_parser.messages)
+                    fastapi_parser.messages.clear()
+                    for message_type, message_bytes in messages:
+                        if message_type == MultiPartMessage.PART_BEGIN:
+                            content_disposition = None
+                            content_type = b""
+                            data = b""
+                        elif message_type == MultiPartMessage.HEADER_FIELD:
+                            header_field += message_bytes
+                        elif message_type == MultiPartMessage.HEADER_VALUE:
+                            header_value += message_bytes
+                        elif message_type == MultiPartMessage.HEADER_END:
+                            field = header_field.lower()
+                            if field == b"content-disposition":
+                                content_disposition = header_value
+                            elif field == b"content-type":
+                                content_type = header_value
+                            header_field = b""
+                            header_value = b""
+                        elif message_type == MultiPartMessage.HEADERS_FINISHED:
+                            disposition, options = parse_options_header(content_disposition)
+                            field_name = _user_safe_decode(options[b"name"], charset)
+                            if b"filename" in options:
+                                filename = _user_safe_decode(options[b"filename"], charset)
+                        elif message_type == MultiPartMessage.PART_DATA:
+                                await f.write(message_bytes)
+                        elif message_type == MultiPartMessage.PART_END:
+                            pass
+                        elif message_type == MultiPartMessage.END:
+                            pass
+
+    os.rename(pending_path, Path(upload_path,filename))
+    return Path(upload_path,filename), filename
+
