@@ -24,6 +24,7 @@ logger = logging.getLogger("pims.app")
 class ReadableSettings(BaseSettings):
     root: str
     pending_path: str
+    writing_path: str
     checker_resolution_file: str = "checkerResolution.csv"
     default_image_size_safety_mode: str = "SAFE_REJECT"
     default_annotation_origin: str = "LEFT_TOP"
