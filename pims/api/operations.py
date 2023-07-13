@@ -230,20 +230,22 @@ async def import_direct_chunks(
     ''' Upload file using the request inspired by UploadFile class from FastAPI along with improved efficiency '''
 
     multipart_parser = MultiPartParser(request.headers, request.stream())
+    filename = str(unique_name_generator())
+    pending_path = Path(WRITING_PATH,filename)
 
-    if not os.path.exists(WRITING_PATH):
+    if not os.path.exists(pending_path.parent):
         os.makedirs(WRITING_PATH)
 
-    upload_path , upload_name = await write_file(multipart_parser,WRITING_PATH)
+    upload_name = await write_file(multipart_parser, pending_path)
     upload_size = request.headers['content-length']
 
-    cytomine, cytomine_auth, root = connexion_to_core(request, core, cytomine, str(upload_path), upload_size, upload_name,  id_project, id_storage,
+    cytomine, cytomine_auth, root = connexion_to_core(request, core, cytomine, str(pending_path), upload_size, upload_name,  id_project, id_storage,
                                                 projects, storage, config, keys, values)
 
     if sync:
         try:
             run_import(
-                upload_path, upload_name,
+                pending_path, upload_name,
                 extra_listeners=[cytomine], prefer_copy=False
             )
             root = cytomine.initial_uf.fetch()
@@ -273,7 +275,7 @@ async def import_direct_chunks(
     else:
         send_task(
             Task.IMPORT_WITH_CYTOMINE,
-            args=[cytomine_auth, upload_path, upload_name, cytomine, False],
+            args=[cytomine_auth, pending_path, upload_name, cytomine, False],
             starlette_background=background
         )
 
@@ -357,7 +359,7 @@ def export_upload(
 def delete(filepath):
     pass
 
-async def write_file(fastapi_parser: MultiPartParser, upload_path):
+async def write_file(fastapi_parser: MultiPartParser, pending_path):
     ''' This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file '''
 
     _, params = parse_options_header(fastapi_parser.headers["Content-Type"])
@@ -365,8 +367,7 @@ async def write_file(fastapi_parser: MultiPartParser, upload_path):
     if type(charset) == bytes:
         charset = charset.decode("latin-1")
     fastapi_parser._charset = charset
-    filename = 'no-name'
-    pending_path = Path(upload_path,filename)
+    original_filename = "no-name"
 
     boundary = params[b"boundary"]
     headers_finised = False
@@ -382,14 +383,13 @@ async def write_file(fastapi_parser: MultiPartParser, upload_path):
         async for chunk in fastapi_parser.stream:
             # we assume that there is only one key-value in the body request (that is only one file to upload and no other parameter in the request such taht there is only one headers block)
             if not headers_finised:#going through the one-only headers block of the body request and retrieve the filename 
-                filename, headers_finised = await process_chunks_headers(parser, fastapi_parser, chunk, f, filename=filename)
+                original_filename, headers_finised = await process_chunks_headers(parser, fastapi_parser, chunk, f, original_filename=original_filename)
             else: #enables more efficient upload by by-passing the mutlipart parser logic and just writing the data bytes directly
                 await f.write(chunk) 
 
-    os.rename(pending_path, Path(upload_path,filename))
-    return Path(upload_path,filename), filename
+    return original_filename
 
-async def process_chunks_headers(parser, fastapi_parser, chunk, file, header_field: bytes =b"", header_value: bytes =b"", filename='no-name'):
+async def process_chunks_headers(parser, fastapi_parser, chunk, file, header_field: bytes =b"", header_value: bytes =b"", original_filename='no-name'):
     ''' This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file '''
 
     parser.write(chunk) # when this line is run at each chunk, it is time-consuming for big files 
@@ -408,10 +408,10 @@ async def process_chunks_headers(parser, fastapi_parser, chunk, file, header_fie
             headers_finished = True
             _, options = parse_options_header(content_disposition)
             if b"filename" in options:
-                filename = _user_safe_decode(options[b"filename"], fastapi_parser._charset)
+                original_filename = _user_safe_decode(options[b"filename"], fastapi_parser._charset)
         elif message_type == MultiPartMessage.PART_DATA:
                 await file.write(message_bytes)
-    return filename, headers_finished
+    return original_filename, headers_finished
 
 def connexion_to_core(request: Request, core: str, cytomine: str, upload_path: str, upload_size: str, upload_name: str,  id_project: str, id_storage: str, projects: str, storage: str, 
                       config: Settings,  keys: str, values: str):
