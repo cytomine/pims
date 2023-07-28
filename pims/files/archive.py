@@ -18,6 +18,7 @@ import sys
 # Importing collections.abc objects from collections is deprecated
 # since python 3.3. 
 from sys import version_info
+import zipfile
 if version_info.major < 3 or \
         (version_info.major == 3 and version_info.minor < 3):
     from collections import Callable
@@ -149,7 +150,14 @@ class Archive(Path):
             )
 
         try:
-            shutil.unpack_archive(self.absolute(), path, self._format.name)
+            # shutil.unpack_archive function (prior to python 3.9) performs archive unpacking in memory causing
+            # high RAM memory usage for large ZIP archive extraction so need to use another library
+            # see /pims-ce/-/issues/89
+            if self._format.name.lower == "zip":
+                with zipfile.ZipFile(self.absolute(), 'r') as zip_ref:
+                    zip_ref.extractall(path)
+            else:
+                shutil.unpack_archive(self.absolute(), path, self._format.name)
         except shutil.ReadError as e:
             raise ArchiveError(str(e))
 
