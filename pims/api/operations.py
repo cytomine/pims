@@ -147,7 +147,19 @@ async def import_direct(
     config: Settings = Depends(get_settings),
     file: UploadFile = File(...,alias="files[].file")
 ):
-    ''' Upload file using the class UploadFile from FastAPI (slow compared to NGINX method) '''
+    ''' 
+    Upload file using the class UploadFile from FastAPI (slow compared to NGINX method):
+    ''' 
+    
+    ''' 
+    Implementation of a way to upload a file without passing through NGINX module. In this case NGINX rather forwards the upload request to PIMS
+    and the latter makes use of the UploadFile class implemented by FastAPI to handle the upload process. 
+    
+    Why is it slow? Using UploadFile calls FastAPI parse() function to feed the parser with data from the request using parser from multipart library.
+    As the size of the image can be large, there might be a lot of chunks and for each of these chunks,the parser from mutlipart library will extract
+    individual parts of the multipart request by doing parser.write(chunk) and this is time-consuming 
+
+    '''
 
     upload_name = sanitize_filename(file.filename)
     filepath = WRITING_PATH
@@ -360,7 +372,17 @@ def delete(filepath):
     pass
 
 async def write_file(fastapi_parser: MultiPartParser, pending_path):
-    ''' This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file '''
+    '''
+    This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file:
+
+    We know that, besides the first chunks where it is useful to retrieve the headers "Content-Disposition" and the "Content-Type" 
+    (and not write them in the file) , all the other chunks will be bytes of the image to upload an can be written right away in a file on disk.
+    Therefore, we can get inspired by the parse() function of FastAPI and, by assuming that there is only one file per request
+    (we do not handle multiple file upload) and no other key-value pairs, we can parse the first chunks until the headers are finished to retrieve 
+    the headers "Content-Disposition" and the "Content-Type" (to get the filename) by calling process_chunks_headers(). Once the headers are process,
+    we can directly write the bytes into a file.
+    
+    '''
 
     _, params = parse_options_header(fastapi_parser.headers["Content-Type"])
     charset = params.get(b"charset", "utf-8")
@@ -390,7 +412,10 @@ async def write_file(fastapi_parser: MultiPartParser, pending_path):
     return original_filename
 
 async def process_chunks_headers(parser, fastapi_parser, chunk, file, header_field: bytes =b"", header_value: bytes =b"", original_filename='no-name'):
-    ''' This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file '''
+    ''' 
+    This function is inspired by parse(self) function from formparsers.py in fastapi>=0.65.1,<=0.68.2' used to upload a file:
+    
+    '''
 
     parser.write(chunk) # when this line is run at each chunk, it is time-consuming for big files 
     messages = list(fastapi_parser.messages)
