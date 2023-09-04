@@ -46,7 +46,6 @@ def run_import_with_cytomine_fallback(
         extra_listeners=[cytomine_listener], prefer_copy=prefer_copy
     )
 
-
 @celery_app.task
 def run_import(filepath, name, prefer_copy):
     run_import_fallback(filepath, name, prefer_copy=prefer_copy)

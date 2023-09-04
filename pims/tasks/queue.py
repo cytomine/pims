@@ -54,6 +54,7 @@ celery_app.conf.task_routes = {
 class Task(str, Enum):
     IMPORT = "IMPORT"
     IMPORT_WITH_CYTOMINE = "IMPORT_WITH_CYTOMINE"
+    IMPORT_WITH_FILE = "IMPORT_WITH_FILE"
 
 
 CELERY_TASK_MAPPING = {
@@ -63,7 +64,7 @@ CELERY_TASK_MAPPING = {
 
 BG_TASK_MAPPING = {
     Task.IMPORT: "pims.tasks.worker.run_import_fallback",
-    Task.IMPORT_WITH_CYTOMINE: "pims.tasks.worker.run_import_with_cytomine_fallback"
+    Task.IMPORT_WITH_CYTOMINE: "pims.tasks.worker.run_import_with_cytomine_fallback",
 }
 
 

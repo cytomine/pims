@@ -12,11 +12,14 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 import logging
+import os
 import shutil
 from typing import List, Optional
+import aiofiles
 
 from celery import group, signature
-from celery.result import allow_join_result  # noqa
+from celery.result import allow_join_result
+from fastapi import Request, UploadFile  # noqa
 
 from pims.api.exceptions import (
     BadRequestException, FilepathNotFoundProblem,
@@ -47,6 +50,7 @@ from pims.utils.strings import unique_name_generator
 log = logging.getLogger("pims.app")
 
 PENDING_PATH = Path(get_settings().pending_path)
+WRITING_PATH = Path(get_settings().writing_path)
 FILE_ROOT_PATH = Path(get_settings().root)
 
 
@@ -154,7 +158,7 @@ class FileImporter:
             # Check the file is in pending area,
             # or comes from a extracted collection
             if (not self.pending_file.is_extracted() and
-                self.pending_file.parent != PENDING_PATH) \
+                (self.pending_file.parent != WRITING_PATH and self.pending_file.parent != PENDING_PATH)) \
                     or not self.pending_file.exists():
                 self.notify(ImportEventType.FILE_NOT_FOUND, self.pending_file)
                 raise FilepathNotFoundProblem(self.pending_file)
