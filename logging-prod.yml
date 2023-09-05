@@ -8,7 +8,6 @@ formatters:
     class: pims.logger.StdoutFormatter
     format: "[%(asctime)s][%(levelname)s][%(process)s][%(threadName)s] %(message)s"
 
-
 handlers:
   console:
     class: logging.StreamHandler
@@ -17,19 +16,25 @@ handlers:
 
 loggers:
   pims:
-    level: WARNING
+    level: INFO
   pims.app:
     level: INFO
+  pims.cytomine:
+    level: INFO
+    handlers: [console]
+    propagate: false
   pyvips:
+    level: ERROR
+  pyvips.vobject:
     level: ERROR
   uvicorn:
     level: INFO
   uvicorn.access:
     level: CRITICAL
-  gunicorn.error:
-    propagate: true
+  #  gunicorn.error:
+  #    propagate: true
   cytomine.client:
-    level: WARNING
+    level: INFO
 
 root:
   handlers: [console]
