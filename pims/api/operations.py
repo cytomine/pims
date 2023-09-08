@@ -132,7 +132,7 @@ async def legacy_import(
             try:
                 run_import(
                     upload_path, upload_name,
-                    extra_listeners=[cytomine], prefer_copy=False
+                    extra_listeners=[cytomine], prefer_copy=True
                 )
                 root = cytomine.initial_uf.fetch()
                 images = cytomine.images
