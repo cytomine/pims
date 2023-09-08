@@ -133,7 +133,7 @@ class FileImporter:
                 log.error(e)
                 log.warning(f"No method {method} for import listener {listener}")
 
-    def run(self, prefer_copy: bool = False):
+    def run(self, prefer_copy: bool = True):
         """
         Import the pending file. It moves a pending file to PIMS root path, tries to
         identify the file format, converts it if needed and checks its integrity.
@@ -395,11 +395,11 @@ class FileImporter:
             self.notify(ImportEventType.FILE_ERROR, directory, exception=e)
             raise FileErrorProblem(directory)
 
-    def move(self, origin: Path, dest: Path, prefer_copy: bool = False):
+    def move(self, origin: Path, dest: Path, prefer_copy: bool = True):
         """Move origin to dest (with notifications)"""
         try:
             if prefer_copy:
-                shutil.copy(origin, dest)
+                shutil.copytree(origin, dest)
             else:
                 shutil.move(origin, dest)
         except (FileNotFoundError, FileExistsError, OSError) as e:
@@ -417,7 +417,7 @@ class FileImporter:
             self.notify(ImportEventType.FILE_ERROR, path, exception=e)
             raise FileErrorProblem(path)
 
-    def import_collection(self, collection: Path, prefer_copy: bool = False):
+    def import_collection(self, collection: Path, prefer_copy: bool = True):
         """Import recursively children of the collection."""
         cytomine = None
         for listener in self.listeners:
@@ -492,7 +492,7 @@ class FileImporter:
 
 def run_import(
     filepath: str, name: str, extra_listeners: Optional[List[ImportListener]] = None,
-    prefer_copy: bool = False
+    prefer_copy: bool = True
 ):
     pending_file = Path(filepath)
 
