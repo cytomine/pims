@@ -151,6 +151,7 @@ def export_file(
     if not (path.has_upload_role() or path.has_original_role() or path.has_spatial_role() or path.has_spectral_role()):
         raise BadRequestException()
 
+    path = path.resolve()
     if path.is_dir():
         tmp_export = Path(f"/tmp/{unique_name_generator()}")
         make_zip_archive(tmp_export, path)
