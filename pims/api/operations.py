@@ -157,6 +157,7 @@ def export_file(
     else:
         exported_filename = path.name
 
+    media_type = "application/octet-stream"
     if path.is_dir():
         tmp_export = Path(f"/tmp/{unique_name_generator()}")
         make_zip_archive(tmp_export, path)
@@ -166,12 +167,17 @@ def export_file(
 
         background.add_task(cleanup, tmp_export)
         exported = tmp_export
+
+        if not exported_filename.endswith(".zip"):
+            exported_filename += ".zip"
+
+        media_type = "application/zip"
     else:
         exported = path
 
     return FileResponse(
         exported,
-        media_type="application/octet-stream",
+        media_type=media_type,
         filename=exported_filename
     )
 
@@ -206,6 +212,10 @@ def export_upload(
 
         background.add_task(cleanup, tmp_export)
         upload_file = tmp_export
+
+        if not exported_filename.endswith(".zip"):
+            exported_filename += ".zip"
+
         media_type = "application/zip"
 
     return FileResponse(
