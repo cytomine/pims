@@ -143,7 +143,8 @@ def import_(filepath, body):
 @router.get('/file/{filepath:path}/export', tags=['Export'])
 def export_file(
     background: BackgroundTasks,
-    path: Path = Depends(filepath_parameter)
+    path: Path = Depends(filepath_parameter),
+    filename: Optional[str] = Query(None, description="Suggested filename for returned file")
 ):
     """
     Export a file. All files with an identified PIMS role in the server base path can be exported.
@@ -151,6 +152,12 @@ def export_file(
     if not (path.has_upload_role() or path.has_original_role() or path.has_spatial_role() or path.has_spectral_role()):
         raise BadRequestException()
 
+    if filename is not None:
+        exported_filename = filename
+    else:
+        exported_filename = path.name
+
+    media_type = "application/octet-stream"
     if path.is_dir():
         tmp_export = Path(f"/tmp/{unique_name_generator()}")
         make_zip_archive(tmp_export, path)
@@ -160,13 +167,18 @@ def export_file(
 
         background.add_task(cleanup, tmp_export)
         exported = tmp_export
+
+        if not exported_filename.endswith(".zip"):
+            exported_filename += ".zip"
+
+        media_type = "application/zip"
     else:
         exported = path
 
     return FileResponse(
         exported,
-        media_type="application/octet-stream",
-        filename=path.name
+        media_type=media_type,
+        filename=exported_filename
     )
 
 
@@ -174,6 +186,7 @@ def export_file(
 def export_upload(
     background: BackgroundTasks,
     path: Path = Depends(imagepath_parameter),
+    filename: Optional[str] = Query(None, description="Suggested filename for returned file")
 ):
     """
     Export the upload representation of an image.
@@ -182,6 +195,12 @@ def export_upload(
     check_representation_existence(image)
 
     upload_file = image.get_upload().resolve()
+
+    if filename is not None:
+        exported_filename = filename
+    else:
+        exported_filename = upload_file.name
+
     media_type = image.media_type
     if upload_file.is_dir():
         # if archive has been deleted
@@ -193,12 +212,16 @@ def export_upload(
 
         background.add_task(cleanup, tmp_export)
         upload_file = tmp_export
+
+        if not exported_filename.endswith(".zip"):
+            exported_filename += ".zip"
+
         media_type = "application/zip"
 
     return FileResponse(
         upload_file,
         media_type=media_type,
-        filename=upload_file.name
+        filename=exported_filename
     )
 
 
