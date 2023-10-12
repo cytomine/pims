@@ -53,6 +53,8 @@ PENDING_PATH = Path(get_settings().pending_path)
 WRITING_PATH = Path(get_settings().writing_path)
 FILE_ROOT_PATH = Path(get_settings().root)
 
+AUTO_DELETE_MULTI_FILE_FORMAT_ARCHIVE = get_settings().auto_delete_multi_file_format_archive
+
 
 class FileErrorProblem(BadRequestException):
     pass
@@ -245,8 +247,18 @@ class FileImporter:
 
                     self.notify(
                         ImportEventType.END_UNPACKING, self.upload_path,
-                        self.original_path, format=format, is_collection=False
+                        self.original_path, format=format, is_collection=False,
+                        delete_zip=AUTO_DELETE_MULTI_FILE_FORMAT_ARCHIVE
                     )
+
+                    if AUTO_DELETE_MULTI_FILE_FORMAT_ARCHIVE:
+                        self.upload_path.unlink()
+                        # Move ORIGINAL directory to UPLOAD
+                        self.move(self.original_path, self.upload_path)
+
+                        # Create a symlink ORIGINAL -> UPLOAD
+                        self.mksymlink(self.original_path, self.upload_path)
+
                     self.upload_path = self.original_path
                 else:
                     self.extracted_dir = self.processed_dir / Path(EXTRACTED_DIR)

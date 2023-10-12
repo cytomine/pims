@@ -290,26 +290,31 @@ class CytomineListener(ImportListener):
 
     def end_unpacking(
         self, path: Path, unpacked_path: Path, *args,
-        format: AbstractFormat = None, is_collection: bool = False, **kwargs
+        format: AbstractFormat = None, is_collection: bool = False, delete_zip: bool = False, **kwargs
     ):
         parent = self.get_uf(path)
         parent.status = UploadedFile.UNPACKED
         parent.update()
 
         if not is_collection:
-            uf = UploadedFile()
+            uf = parent if delete_zip else UploadedFile()
             uf.status = UploadedFile.UPLOADED  # Better status ?
-            uf.contentType = format.get_identifier()  # TODO
+            uf.contentType = format.get_identifier()
             uf.size = unpacked_path.size
             uf.filename = str(unpacked_path.relative_to(FILE_ROOT_PATH))
             uf.originalFilename = str(format.main_path.name)
             uf.ext = ""
             uf.storage = parent.storage
             uf.user = parent.user
-            uf.parent = parent.id
+            uf.parent = None if delete_zip else parent.id
             uf.imageServer = parent.imageServer
             uf.save()
             self.path_uf_mapping[str(unpacked_path)] = uf
+            if delete_zip:
+                self.path_uf_mapping[str(path)] = uf
+        else:
+            pass
+            # TODO: delete zip when it's a collection
 
     def register_file(self, path: Path, parent_path: Path, *args, **kwargs):
         parent = self.get_uf(parent_path)

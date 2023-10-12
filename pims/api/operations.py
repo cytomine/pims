@@ -152,6 +152,7 @@ def export_file(
     if not (path.has_upload_role() or path.has_original_role() or path.has_spatial_role() or path.has_spectral_role()):
         raise BadRequestException()
 
+    path = path.resolve()
     if filename is not None:
         exported_filename = filename
     else:
