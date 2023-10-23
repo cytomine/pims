@@ -24,7 +24,7 @@ from cytomine.models import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.formparsers import MultiPartMessage, MultiPartParser, _user_safe_decode
 
 from pims.api.exceptions import (
@@ -227,33 +227,26 @@ def export_upload(
         filename=exported_filename
     )
 
+
 @router.delete('/image/{filepath:path}', tags=['delete'])
 def delete(    
-    background: BackgroundTasks,
     path: Path = Depends(imagepath_parameter),
-    ):
+):
     """
-    Delete the upload representation of an image.
+    Delete the all the representations of an image, including the related upload folder.
     """
-    if path.is_collection(): #trying to suppress an archive (.zip) as collection of image 
-        media_type = "application/zip"
-        pass
 
-    original_path = path.get_original()
-    if original_path: #check if path does exist 
-        upload_file_path = original_path.get_upload().resolve()
-        media_type = original_path.media_type
+    # Deleting an archive will be refused as it is not an *image* but a collection
+    # (checked in `Depends(imagepath_parameter)`)
 
-    if upload_file_path.is_extracted(): #DOES NOT WORK IF DELETE THE REAL FILE (and not the symlink)
-        pass  #trying to suppress a file coming from a collection of image leading to a dangling symlink in the collection folder
+    image = path.get_original()
+    check_representation_existence(image)
 
-    shutil.rmtree(upload_file_path.parent)
+    upload_root = image.get_upload().resolve().upload_root()
+    shutil.rmtree(upload_root)
 
-    return FileResponse(
-        upload_file_path,
-        media_type=media_type,
-        filename=upload_file_path.name
-    )
+    return Response(status_code=200)
+
 
 async def write_file(fastapi_parser: MultiPartParser, pending_path):
     '''
