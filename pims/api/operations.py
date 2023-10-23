@@ -13,6 +13,7 @@
 #  * limitations under the License.
 import logging
 import os
+import shutil
 import traceback
 from typing import Optional
 import aiofiles
@@ -23,7 +24,7 @@ from cytomine.models import (
 )
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.formparsers import MultiPartMessage, MultiPartParser, _user_safe_decode
 
 from pims.api.exceptions import (
@@ -44,6 +45,7 @@ from pims.importer.listeners import CytomineListener
 from pims.tasks.queue import Task, send_task
 from pims.utils.iterables import ensure_list
 from pims.utils.strings import unique_name_generator
+from pims.files.archive import Archive, ArchiveError
 
 try:
     import multipart
@@ -226,8 +228,25 @@ def export_upload(
     )
 
 
-def delete(filepath):
-    pass
+@router.delete('/image/{filepath:path}', tags=['delete'])
+def delete(    
+    path: Path = Depends(imagepath_parameter),
+):
+    """
+    Delete the all the representations of an image, including the related upload folder.
+    """
+
+    # Deleting an archive will be refused as it is not an *image* but a collection
+    # (checked in `Depends(imagepath_parameter)`)
+
+    image = path.get_original()
+    check_representation_existence(image)
+
+    upload_root = image.get_upload().resolve().upload_root()
+    shutil.rmtree(upload_root)
+
+    return Response(status_code=200)
+
 
 async def write_file(fastapi_parser: MultiPartParser, pending_path):
     '''
